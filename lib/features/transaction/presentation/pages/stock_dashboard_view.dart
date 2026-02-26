@@ -1,7 +1,128 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../bloc/stock_dashboard_bloc.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../injection.dart';
 
+// ==========================================================================
+// 1. PDF SERVICE (With Summary)
+// ==========================================================================
+class ReportPrintService {
+  static Future<void> generateReportPDF(String title, List data) async {
+    final pdf = pw.Document();
+    double totalAmt = data.fold(0, (sum, item) => sum + (double.tryParse(item['price'].toString()) ?? 0));
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (context) => [
+          pw.Header(level: 0, child: pw.Text("${title.toUpperCase()} REPORT")),
+          pw.TableHelper.fromTextArray(
+            headers: ['DATE', 'ITEM NAME', 'BARCODE', 'PRICE', 'REMARK'],
+            data: data.map((item) => [
+              item['date']?.toString().split('T')[0] ?? '-',
+              item['item_name'] ?? '-',
+              item['barcode_number'] ?? '-',
+              item['price']?.toString() ?? '0',
+              item['sale__bill_no'] ?? item['status'] ?? '-'
+            ]).toList(),
+          ),
+          pw.SizedBox(height: 20),
+          pw.Divider(),
+          pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text("Total Items: ${data.length}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text("Total Amount: ₹${totalAmt.toStringAsFixed(2)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              ]
+          )
+        ],
+      ),
+    );
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save(), name: '${title}_Report');
+  }
+}
+
+// ==========================================================================
+// 2. DATA SOURCE FOR PAGINATION
+// ==========================================================================
+class ReportDataSource extends DataTableSource {
+  final List<dynamic> data;
+  ReportDataSource(this.data);
+
+  @override
+  DataRow? getRow(int index) {
+    if (index >= data.length) return null;
+    final i = data[index];
+    return DataRow(cells: [
+      DataCell(Text(i['date']?.toString().split('T')[0] ?? "-", style: const TextStyle(fontSize: 11))),
+      DataCell(Text(i['item_name']?.toString() ?? "-", style: const TextStyle(fontSize: 11))),
+      DataCell(Text(i['barcode_number']?.toString() ?? "-", style: const TextStyle(fontSize: 11))),
+      DataCell(Text("₹${i['price']}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+      DataCell(Text(i['sale__bill_no']?.toString() ?? i['status']?.toString() ?? "N/A", style: const TextStyle(fontSize: 10))),
+    ]);
+  }
+
+  @override bool get isRowCountApproximate => false;
+  @override int get rowCount => data.length;
+  @override int get selectedRowCount => 0;
+}
+
+// ==========================================================================
+// 3. MODELS & BLOC
+// ==========================================================================
+class DashboardModel {
+  final int currentStock, itemsSold, billCount;
+  final double revenue, discountGiven;
+  final List<Map<String, dynamic>> recentSales;
+
+  DashboardModel({
+    required this.currentStock, required this.itemsSold, required this.billCount,
+    required this.revenue, required this.discountGiven, required this.recentSales,
+  });
+
+  factory DashboardModel.fromJson(Map<String, dynamic> json) {
+    final s = json['summary'] ?? {};
+    final f = s['financials'] ?? {};
+    return DashboardModel(
+      currentStock: s['current_stock'] ?? 0,
+      itemsSold: s['items_sold'] ?? 0,
+      billCount: f['bill_count'] ?? 0,
+      revenue: double.tryParse(f['total_revenue']?.toString() ?? '0') ?? 0,
+      discountGiven: double.tryParse(f['total_discount_amt']?.toString() ?? '0') ?? 0,
+      recentSales: List<Map<String, dynamic>>.from(json['recent_sales'] ?? []),
+    );
+  }
+}
+
+class DashboardRepository {
+  final ApiClient apiClient = sl<ApiClient>();
+  Future<DashboardModel> getSummary() async => DashboardModel.fromJson((await apiClient.get('/api/inventory/dashboard/')).data);
+}
+
+abstract class DashEvent {}
+class LoadDash extends DashEvent {}
+abstract class DashState {}
+class DashLoading extends DashState {}
+class DashLoaded extends DashState { final DashboardModel data; DashLoaded(this.data); }
+class DashError extends DashState { final String msg; DashError(this.msg); }
+
+class DashboardBloc extends Bloc<DashEvent, DashState> {
+  final DashboardRepository repo;
+  DashboardBloc(this.repo) : super(DashLoading()) {
+    on<LoadDash>((event, emit) async {
+      emit(DashLoading());
+      try { emit(DashLoaded(await repo.getSummary())); } catch (e) { emit(DashError(e.toString())); }
+    });
+  }
+}
+
+// ==========================================================================
+// 4. MAIN UI SCREEN
+// ==========================================================================
 class StockDashboardView extends StatefulWidget {
   const StockDashboardView({super.key});
   @override
@@ -9,178 +130,174 @@ class StockDashboardView extends StatefulWidget {
 }
 
 class _StockDashboardViewState extends State<StockDashboardView> {
-  final TextEditingController _searchController = TextEditingController();
-  List<dynamic> _allProducts = [];
-  List<dynamic> _filteredProducts = [];
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<DashboardStockBloc>().add(FetchDashboardStats());
-  }
-
-  // 🔍 Search Logic: Name aur SKU dono par kaam karega
-  void _runSearch(String query) {
-    setState(() {
-      _filteredProducts = _allProducts
-          .where((p) =>
-      p['name'].toString().toLowerCase().contains(query.toLowerCase()) ||
-          p['sku'].toString().toLowerCase().contains(query.toLowerCase()))
-          .toList();
-    });
-  }
+  DateTime _from = DateTime.now();
+  DateTime _to = DateTime.now();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: BlocConsumer<DashboardStockBloc, DashboardState>(
-        listener: (context, state) {
-          if (state is DashboardLoaded) {
-            _allProducts = state.summary.productList;
-            _filteredProducts = _allProducts;
-          }
-        },
-        builder: (context, state) {
-          if (state is DashboardLoading) return const Center(child: CircularProgressIndicator());
-          if (state is DashboardLoaded) {
-            final d = state.summary;
-            return SafeArea(
-              child: Column(
-                children: [
-                  _buildHeader(),
-                  if (d.lowStockCount > 0) _buildAlertBar(d.lowStockCount),
-
-                  // 💰 Horizontal Rectangular Cards (Swipable)
-                  const SizedBox(height: 12),
-                  _buildMetricsRow(d),
-
-                  // 🔍 Search Bar
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: _buildSearchBar(),
-                  ),
-
-                  // 📋 Product List Table
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text("INVENTORY STATUS", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF64748B))),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(child: _buildProductList()),
-                ],
-              ),
-            );
-          }
-          return const Center(child: Text("Unable to sync data"));
-        },
+    return BlocProvider(
+      create: (context) => DashboardBloc(sl<DashboardRepository>())..add(LoadDash()),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0F172A),
+          title: const Text("BUSINESS ANALYTICS", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+          actions: [
+            _actionBtn(context, "STOCK REPORT", Colors.blue, () => _showDateDialog(context, "stock")),
+            _actionBtn(context, "SALES REPORT", Colors.green, () => _showDateDialog(context, "sales")),
+            const SizedBox(width: 10),
+          ],
+        ),
+        body: BlocBuilder<DashboardBloc, DashState>(
+          builder: (context, state) {
+            if (state is DashLoading) return const Center(child: CircularProgressIndicator());
+            if (state is DashLoaded) return _buildMainDashboard(context, state.data);
+            return const Center(child: Text("Error fetching analytics"));
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildHeader() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const Text("Control Center", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
-        IconButton(onPressed: () => context.read<DashboardStockBloc>().add(FetchDashboardStats()), icon: const Icon(Icons.refresh_rounded)),
-      ],
+  Widget _actionBtn(BuildContext context, String lab, Color col, VoidCallback fn) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
+    child: OutlinedButton(
+      style: OutlinedButton.styleFrom(side: BorderSide(color: col), foregroundColor: col),
+      onPressed: fn, child: Text(lab, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
     ),
   );
 
-  Widget _buildAlertBar(int count) => Container(
-    margin: const EdgeInsets.symmetric(horizontal: 16),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.red.shade100)),
-    child: Row(children: [
-      const Icon(Icons.error_outline, color: Colors.red, size: 18),
-      const SizedBox(width: 8),
-      Text("$count Items are running low!", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
+  void _showDateDialog(BuildContext context, String type) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Generate ${type.toUpperCase()} Report"),
+        content: StatefulBuilder(builder: (context, setS) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _dateField("From Date", _from, (d) => setS(() => _from = d)),
+            const SizedBox(height: 10),
+            _dateField("To Date", _to, (d) => setS(() => _to = d)),
+          ],
+        )),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
+            onPressed: () { Navigator.pop(ctx); _fetchDetailed(type); },
+            child: const Text("PROCEED", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _fetchDetailed(String type) async {
+    final start = "${_from.year}-${_from.month.toString().padLeft(2, '0')}-${_from.day.toString().padLeft(2, '0')}";
+    final end = "${_to.year}-${_to.month.toString().padLeft(2, '0')}-${_to.day.toString().padLeft(2, '0')}";
+    final res = await sl<ApiClient>().get('/api/inventory/dashboard/detailed_report/', query: {'type': type, 'start_date': start, 'end_date': end});
+    _showPaginatedReport(type, res.data);
+  }
+
+  void _showPaginatedReport(String title, List data) {
+    double totalAmt = data.fold(0, (sum, item) => sum + (double.tryParse(item['price'].toString()) ?? 0));
+    final source = ReportDataSource(data);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(10),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.98,
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text("${title.toUpperCase()} REPORT", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text("Total Items: ${data.length} | Total Value: ₹${totalAmt.toStringAsFixed(2)}", style: const TextStyle(fontSize: 11, color: Colors.blueGrey, fontWeight: FontWeight.bold)),
+                  ]),
+                  Row(children: [
+                    IconButton(icon: const Icon(Icons.picture_as_pdf, color: Colors.red), onPressed: () => ReportPrintService.generateReportPDF(title, data)),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ])
+                ],
+              ),
+              const Divider(),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: PaginatedDataTable(
+                    source: source,
+                    columns: const [
+                      DataColumn(label: Text("DATE")),
+                      DataColumn(label: Text("ITEM NAME")),
+                      DataColumn(label: Text("BARCODE")),
+                      DataColumn(label: Text("PRICE")),
+                      DataColumn(label: Text("REMARK")),
+                    ],
+                    rowsPerPage: data.length > 10 ? 10 : (data.length > 0 ? data.length : 1),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMainDashboard(BuildContext context, DashboardModel d) => SingleChildScrollView(
+    padding: const EdgeInsets.all(20),
+    child: Column(children: [
+      GridView.count(
+        crossAxisCount: 4, shrinkWrap: true, crossAxisSpacing: 15, childAspectRatio: 2.3,
+        children: [
+          _kpi("REVENUE", "₹${d.revenue}", Colors.green, Icons.payments),
+          _kpi("STOCK", "${d.currentStock}", Colors.blue, Icons.inventory),
+          _kpi("SOLD", "${d.itemsSold}", Colors.orange, Icons.shopping_bag),
+          _kpi("DISCOUNT", "₹${d.discountGiven}", Colors.red, Icons.sell),
+        ],
+      ),
+      const SizedBox(height: 25),
+      _recentSalesTable(d.recentSales),
     ]),
   );
 
-  // 💰 Rectangular Metric Cards Fix
-  Widget _buildMetricsRow(var d) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Row(
-      children: [
-        _metricCard("Sales Today", "₹${d.sales}", const Color(0xFF0EA5E9)),
-        _metricCard("Total Profit", "₹${d.profit}", const Color(0xFF10B981)),
-        _metricCard("Net Cash Flow", "₹${d.netFlow}", const Color(0xFF00BCD4)), // ⬅️ CASH FLOW ADDED
-        _metricCard("Purchase", "₹${d.purchases}", const Color(0xFF6366F1)),
-        _metricCard("Stock Value", "₹${d.valuation}", const Color(0xFFF59E0B)),
-        _metricCard("Wastage Loss", "₹${d.wastage}", const Color(0xFFEF4444)),
-      ],
+  Widget _kpi(String t, String v, Color c, IconData i) => Container(
+    padding: const EdgeInsets.all(15),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+    child: Row(children: [
+      Icon(i, color: c, size: 24), const SizedBox(width: 12),
+      Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text(t, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+        Text(v, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      ])
+    ]),
+  );
+
+  Widget _recentSalesTable(List sales) => Container(
+    width: double.infinity, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+    child: DataTable(
+      headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+      columns: const [DataColumn(label: Text("BILL NO")), DataColumn(label: Text("CUSTOMER")), DataColumn(label: Text("MODE")), DataColumn(label: Text("TOTAL"))],
+      rows: sales.map((s) => DataRow(cells: [
+        DataCell(Text(s['bill_no']?.toString() ?? "-")),
+        DataCell(Text(s['customer_name']?.toString() ?? "Cash")),
+        DataCell(Text(s['payment_mode']?.toString() ?? "CASH")),
+        DataCell(Text("₹${s['total_amount']}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green))),
+      ])).toList(),
     ),
   );
 
-  Widget _metricCard(String label, String value, Color color) => Container(
-    width: 170, // Rectangular Shape
-    height: 90,
-    margin: const EdgeInsets.only(right: 12),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(15),
-      boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(label.toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        FittedBox(
-          child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
-        ),
-      ],
-    ),
+  Widget _dateField(String lab, DateTime dt, Function(DateTime) onPick) => ListTile(
+    title: Text(lab, style: const TextStyle(fontSize: 12)),
+    subtitle: Text("${dt.day}/${dt.month}/${dt.year}", style: const TextStyle(fontWeight: FontWeight.bold)),
+    trailing: const Icon(Icons.event),
+    onTap: () async {
+      final d = await showDatePicker(context: context, firstDate: DateTime(2025), lastDate: DateTime(2030), initialDate: dt);
+      if (d != null) onPick(d);
+    },
   );
-
-  Widget _buildSearchBar() => Container(
-    height: 50,
-    padding: const EdgeInsets.symmetric(horizontal: 15),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
-    child: TextField(
-      controller: _searchController,
-      onChanged: _runSearch,
-      decoration: const InputDecoration(
-        hintText: "Search SKU or Product Name...",
-        hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
-        border: InputBorder.none,
-        icon: Icon(Icons.search, color: Colors.cyan),
-      ),
-    ),
-  );
-
-  Widget _buildProductList() {
-    if (_filteredProducts.isEmpty) return const Center(child: Text("No items found"));
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _filteredProducts.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
-      itemBuilder: (context, i) {
-        final item = _filteredProducts[i];
-        final bool isLow = (item['current_stock'] ?? 0) < 5;
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(vertical: 4),
-          title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          subtitle: Text("SKU: ${item['sku']}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(color: isLow ? Colors.red.shade50 : Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
-            child: Text(
-              "${item['current_stock']}",
-              style: TextStyle(fontWeight: FontWeight.w900, color: isLow ? Colors.red : Colors.green),
-            ),
-          ),
-        );
-      },
-    );
-  }
 }

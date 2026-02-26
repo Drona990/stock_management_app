@@ -1,9 +1,9 @@
 import 'package:get_it/get_it.dart';
-import 'package:stock_management/features/inventory/presentation/bloc/inventory_brand_block.dart';
 import 'package:stock_management/features/inventory/presentation/bloc/inventory_category.dart';
-import 'package:stock_management/features/inventory/presentation/bloc/inventory_product_management_bloc.dart';
-import 'package:stock_management/features/inventory/presentation/widget/inventory_units_view.dart';
-import 'package:stock_management/features/inventory/presentation/widget/tax_profile_view.dart';
+import 'package:stock_management/features/inventory/presentation/bloc/inventory_group_subgroup_bloc.dart';
+import 'package:stock_management/features/inventory/presentation/bloc/location_bloc.dart';
+import 'package:stock_management/features/transaction/presentation/pages/salse_bill_screen.dart';
+import 'package:stock_management/features/transaction/presentation/pages/stock_plus_screen.dart';
 
 
 
@@ -16,19 +16,26 @@ Future<void> initInventoryInjection(GetIt sl) async {
         () => InventoryCategoryBloc(sl<InventoryCategoryRepository>()),
   );
 
-  // injection.dart mein init() ke andar
-  sl.registerLazySingleton<InventoryBrandRepository>(() => InventoryBrandRepository());
-  sl.registerFactory<InventoryBrandBloc>(() => InventoryBrandBloc(sl()));
+// Location Registration
+  sl.registerLazySingleton<LocationRepository>(() => LocationRepository());
+  sl.registerFactory(() => LocationBloc(sl()));
 
-  sl.registerLazySingleton<InventoryUnitRepository>(() => InventoryUnitRepository());
-  sl.registerFactory<InventoryUnitBloc>(() => InventoryUnitBloc(sl()));
+  sl.registerLazySingleton<ProductGroupRepository>(() => ProductGroupRepository());
+  sl.registerFactory(() => ProductGroupBloc(sl()));
+
+  sl.registerLazySingleton<ProductSubGroupRepository>(() => ProductSubGroupRepository());
+  sl.registerFactory(() => ProductSubGroupBloc(sl()));
+
+  sl.registerLazySingleton<StockTransactionRepository>(() => StockTransactionRepository());
+  sl.registerFactory(() => StockEntryBloc(sl<StockTransactionRepository>()));
+
+  sl.registerLazySingleton<SalesRepository>(() => SalesRepository());
+  sl.registerFactory(() => SalesBloc(sl<SalesRepository>()));
 
 
-  sl.registerLazySingleton<TaxProfileRepository>(() => TaxProfileRepository());
-  sl.registerFactory<TaxProfileBloc>(() => TaxProfileBloc(sl()));
-
-  // injection.dart
-  sl.registerLazySingleton<InventoryProductRepository>(() => InventoryProductRepository());
-  sl.registerFactory<InventoryProductBloc>(() => InventoryProductBloc(sl()));
 
 }
+
+
+
+

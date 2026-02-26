@@ -1,28 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:stock_management/features/inventory/presentation/bloc/inventory_brand_block.dart';
+import 'package:stock_management/features/inventory/presentation/bloc/location_bloc.dart'; // Adjust path
 
-class BrandView extends StatefulWidget {
-  const BrandView({super.key});
+class LocationView extends StatefulWidget {
+  const LocationView({super.key});
 
   @override
-  State<BrandView> createState() => _BrandViewState();
+  State<LocationView> createState() => _LocationViewState();
 }
 
-class _BrandViewState extends State<BrandView> {
+class _LocationViewState extends State<LocationView> {
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // Correct Bloc Call
-    context.read<InventoryBrandBloc>().add(LoadInvBrands());
+    // Fetch locations on initialization
+    context.read<LocationBloc>().add(LoadLocations());
   }
 
   @override
   Widget build(BuildContext context) {
-    // Fixed: Pointing to Brand Bloc
-    final bloc = context.read<InventoryBrandBloc>();
+    final bloc = context.read<LocationBloc>();
 
     return Container(
       color: const Color(0xFFF4F7FA),
@@ -30,21 +29,26 @@ class _BrandViewState extends State<BrandView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Brand Management", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-          const Text("Manage your raw material brands (e.g. Amul, Nestle)", style: TextStyle(color: Colors.grey, fontSize: 14)),
+          const Text("Location Management",
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          const Text("Manage your raw material and item locations",
+              style: TextStyle(color: Colors.grey, fontSize: 14)),
           const SizedBox(height: 24),
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _searchController,
-                  onChanged: (val) => bloc.add(LoadInvBrands(query: val)),
+                  onChanged: (val) => bloc.add(LoadLocations(query: val)),
                   decoration: InputDecoration(
-                      hintText: "Search brands...",
+                      hintText: "Search Location...",
                       prefixIcon: const Icon(Icons.search),
                       filled: true,
                       fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none
+                      )
                   ),
                 ),
               ),
@@ -52,7 +56,7 @@ class _BrandViewState extends State<BrandView> {
               ElevatedButton.icon(
                 onPressed: () => _showFormDialog(context, bloc),
                 icon: const Icon(Icons.add),
-                label: const Text("New Brand"),
+                label: const Text("New Location"),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1A1C24),
                     foregroundColor: Colors.white,
@@ -64,11 +68,11 @@ class _BrandViewState extends State<BrandView> {
           ),
           const SizedBox(height: 24),
           Expanded(
-            child: BlocBuilder<InventoryBrandBloc, InventoryBrandState>(
+            child: BlocBuilder<LocationBloc, LocationState>(
               builder: (context, state) {
-                if (state is InvBrandLoading) return const Center(child: CircularProgressIndicator());
-                if (state is InvBrandLoaded) return _buildTable(state.brands, bloc);
-                if (state is InvBrandError) return Center(child: Text(state.message));
+                if (state is LocationLoading) return const Center(child: CircularProgressIndicator());
+                if (state is LocationLoaded) return _buildTable(state.locations, bloc);
+                if (state is LocationError) return Center(child: Text(state.message));
                 return const SizedBox();
               },
             ),
@@ -78,7 +82,7 @@ class _BrandViewState extends State<BrandView> {
     );
   }
 
-  Widget _buildTable(List<InventoryBrandEntity> list, InventoryBrandBloc bloc) {
+  Widget _buildTable(List<LocationEntity> list, LocationBloc bloc) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -95,18 +99,18 @@ class _BrandViewState extends State<BrandView> {
             ),
             child: const Row(
               children: [
-                Expanded(flex: 3, child: Text("BRAND NAME & ORIGIN", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                Expanded(flex: 3, child: Text("LOCATION NAME", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                 Expanded(flex: 1, child: Text("ACTIONS", textAlign: TextAlign.end, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
               ],
             ),
           ),
           Expanded(
             child: list.isEmpty
-                ? const Center(child: Text("No brands found"))
+                ? const Center(child: Text("No location found"))
                 : ListView.separated(
               itemCount: list.length,
               separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) => _buildBrandRow(list[index], bloc),
+              itemBuilder: (context, index) => _buildLocationRow(list[index], bloc),
             ),
           ),
         ],
@@ -114,21 +118,14 @@ class _BrandViewState extends State<BrandView> {
     );
   }
 
-  Widget _buildBrandRow(InventoryBrandEntity brand, InventoryBrandBloc bloc) {
+  Widget _buildLocationRow(LocationEntity location, LocationBloc bloc) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
         children: [
           Expanded(
             flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(brand.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                if (brand.origin != null && brand.origin!.isNotEmpty)
-                  Text("Origin: ${brand.origin}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              ],
-            ),
+            child: Text(location.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           ),
           Expanded(
             flex: 1,
@@ -137,11 +134,11 @@ class _BrandViewState extends State<BrandView> {
               children: [
                 IconButton(
                     icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.orange),
-                    onPressed: () => _showFormDialog(context, bloc, brand: brand)
+                    onPressed: () => _showFormDialog(context, bloc, location: location)
                 ),
                 IconButton(
                     icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    onPressed: () => _confirmDelete(context, brand.id!, bloc)
+                    onPressed: () => _confirmDelete(context, location.id!, bloc)
                 ),
               ],
             ),
@@ -151,9 +148,8 @@ class _BrandViewState extends State<BrandView> {
     );
   }
 
-  void _showFormDialog(BuildContext context, InventoryBrandBloc bloc, {InventoryBrandEntity? brand}) {
-    final nameController = TextEditingController(text: brand?.name);
-    final originController = TextEditingController(text: brand?.origin);
+  void _showFormDialog(BuildContext context, LocationBloc bloc, {LocationEntity? location}) {
+    final nameController = TextEditingController(text: location?.name);
 
     showDialog(
       context: context,
@@ -166,12 +162,10 @@ class _BrandViewState extends State<BrandView> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(brand == null ? "New Brand" : "Edit Brand",
+              Text(location == null ? "New Inventory Location" : "Edit Location",
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 24),
-              _buildField(nameController, "Brand Name (e.g. Amul)"),
-              const SizedBox(height: 16),
-              _buildField(originController, "Origin (e.g. India)"),
+              _buildField(nameController, "Location Name"),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -191,19 +185,18 @@ class _BrandViewState extends State<BrandView> {
                       ),
                       onPressed: () {
                         if (nameController.text.isNotEmpty) {
-                          final entity = InventoryBrandEntity(
+                          final entity = LocationEntity(
                             name: nameController.text,
-                            origin: originController.text,
                           );
-                          if (brand == null) {
-                            bloc.add(AddInvBrand(entity));
+                          if (location == null) {
+                            bloc.add(AddLocation(entity));
                           } else {
-                            bloc.add(EditInvBrand(brand.id!, entity));
+                            bloc.add(EditLocation(location.id!, entity));
                           }
                           Navigator.pop(ctx);
                         }
                       },
-                      child: const Text("Save Brand"),
+                      child: const Text("Save Location"),
                     ),
                   ),
                 ],
@@ -227,17 +220,17 @@ class _BrandViewState extends State<BrandView> {
     );
   }
 
-  void _confirmDelete(BuildContext context, int id, InventoryBrandBloc bloc) {
+  void _confirmDelete(BuildContext context, int id, LocationBloc bloc) {
     showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text("Delete Brand?"),
-          content: const Text("Are you sure? This will remove the brand from your system."),
+          title: const Text("Delete Location?"),
+          content: const Text("Are you sure? Items currently assigned here will no longer have a valid location link."),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
             TextButton(
                 onPressed: () {
-                  bloc.add(DeleteInvBrand(id));
+                  bloc.add(DeleteLocation(id));
                   Navigator.pop(ctx);
                 },
                 child: const Text("Delete", style: TextStyle(color: Colors.red))

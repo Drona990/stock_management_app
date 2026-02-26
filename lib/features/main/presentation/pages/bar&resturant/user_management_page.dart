@@ -209,7 +209,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: _selectedRole,
-          items: ["All Roles", "Chef", "Barman", "Staff","Admin/Manager","Waiter"].map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 12)))).toList(),
+          items: ["All Roles", "Staff","Admin/Manager"].map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 12)))).toList(),
           onChanged: (v) {
             setState(() { _selectedRole = v!; });
             context.read<UserMgmtBloc>().add(FilterUsers(role: v));
@@ -227,7 +227,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
       length: isSuper ? 2 : 1,
       child: Column(
         children: [
-          TabBar(isScrollable: true, tabAlignment: TabAlignment.start, labelColor: const Color(0xFF00BCD4), indicatorColor: const Color(0xFF00BCD4), dividerColor: Colors.transparent, tabs: [if (isSuper) const Tab(text: "ADMINISTRATORS"), const Tab(text: "RESTAURANT TEAM")]),
+          TabBar(isScrollable: true, tabAlignment: TabAlignment.start, labelColor: const Color(0xFF00BCD4), indicatorColor: const Color(0xFF00BCD4), dividerColor: Colors.transparent, tabs: [if (isSuper) const Tab(text: "ADMINISTRATORS"), const Tab(text: "STAFF")]),
           Expanded(
             child: TabBarView(children: [if (isSuper) _buildOriginalTable(context, state.admins), _buildOriginalTable(context, state.staff)]),
           ),

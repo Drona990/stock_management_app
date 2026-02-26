@@ -16,7 +16,7 @@ class WebSocketService {
   String? _currentId;
 
   // 🔗 Laptop/Server IP
-  final String _baseWsUrl = "ws://10.56.210.96:8000/ws/order";
+  final String _baseWsUrl = "ws://10.40.137.96:8000/ws/order";
 
   Stream<dynamic> get stream => _controller.stream;
 

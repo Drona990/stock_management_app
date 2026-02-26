@@ -1,19 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:stock_management/features/inventory/presentation/widget/inventory_group_subgroup_view.dart';
+import 'package:stock_management/features/inventory/presentation/widget/location_view.dart';
 import '../../../../../injection.dart';
-
-// Blocs Import
 import '../bloc/inventory_category.dart';
-import '../bloc/inventory_brand_block.dart';
-import '../bloc/inventory_product_management_bloc.dart';
-// Note: Make sure you have a Wastage Bloc too
-
-// Views Import
+import '../bloc/inventory_group_subgroup_bloc.dart';
 import 'package:stock_management/features/inventory/presentation/widget/item_category_view.dart';
-import 'package:stock_management/features/inventory/presentation/widget/inventory_units_view.dart';
-import 'package:stock_management/features/inventory/presentation/widget/inventory_brand_view.dart';
-import 'package:stock_management/features/inventory/presentation/widget/tax_profile_view.dart';
-import 'package:stock_management/features/inventory/presentation/widget/inventory_product_view.dart';
+
+import '../bloc/location_bloc.dart';
 
 class InventoryPage extends StatefulWidget {
   const InventoryPage({super.key});
@@ -33,7 +27,7 @@ class _InventoryPageState extends State<InventoryPage> with SingleTickerProvider
   void initState() {
     super.initState();
     // Total 6 Tabs: Category, Units, Brand, Tax, Product, Wastage
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -42,11 +36,10 @@ class _InventoryPageState extends State<InventoryPage> with SingleTickerProvider
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (context) => sl<InventoryCategoryBloc>()),
-        BlocProvider(create: (context) => sl<InventoryUnitBloc>()),
-        BlocProvider(create: (context) => sl<InventoryBrandBloc>()),
-        BlocProvider(create: (context) => sl<TaxProfileBloc>()),
-        BlocProvider(create: (context) => sl<InventoryProductBloc>()),
-        // BlocProvider(create: (context) => sl<WastageBloc>()), // Add this when ready
+        BlocProvider(create: (context) => sl<ProductGroupBloc>()),
+        BlocProvider(create: (context) => sl<ProductSubGroupBloc>()),
+        BlocProvider(create: (context) => sl<LocationBloc>()),
+
       ],
       child: Scaffold(
         backgroundColor: surfaceGrey,
@@ -74,29 +67,18 @@ class _InventoryPageState extends State<InventoryPage> with SingleTickerProvider
             labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             tabs: const [
               Tab(child: _TabLabel(Icons.category_outlined, "Manage Category")),
-              Tab(child: _TabLabel(Icons.straighten_rounded, "Manage Units")),
-              Tab(child: _TabLabel(Icons.branding_watermark_outlined, "Manage Brand")),
-              Tab(child: _TabLabel(Icons.receipt_long_rounded, "Tax Profile")),
-              Tab(child: _TabLabel(Icons.inventory_2_outlined, "Manage Product")),
-              Tab(child: _TabLabel(Icons.delete_sweep_outlined, "Manage Wastage")),
+              Tab(child: _TabLabel(Icons.category_outlined, "Group Sub Group")),
+              Tab(child: _TabLabel(Icons.category_outlined, "Manage Location")),
+
             ],
           ),
         ),
         body: TabBarView(
           controller: _tabController,
           children: [
-            const CategoryView(),     // Tab 1
-            const UnitView(),         // Tab 2
-            const BrandView(),        // Tab 3
-            const TaxProfileView(),   // Tab 4
-            const ProductManagementView(), // Tab 5 (Now has access to all Blocs!)
-
-            // Tab 6: Wastage (Abhi ke liye placeholder)
-            Container(
-              color: Colors.white,
-              child: const Center(child: Text("Wastage Tracking Coming Soon",
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
-            ),
+            const CategoryView(),
+            const InventoryGroupSubgroupView(),
+            const LocationView(),
           ],
         ),
       ),

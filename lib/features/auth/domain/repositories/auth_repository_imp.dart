@@ -51,13 +51,12 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-
   @override
   Future<Either<Failure, Map<String, String>>> getUserProfile() async {
     try {
       final response = await remoteDataSource.getUserDashboard();
-
       final responseBody = response.data;
+
       if (responseBody == null || responseBody['data'] == null) {
         return Left(ServerFailure("Server returned no data"));
       }
@@ -65,30 +64,42 @@ class AuthRepositoryImpl implements AuthRepository {
       final dataMap = responseBody['data'];
       final userData = dataMap['user'];
 
-      print("data map $dataMap");
-
       if (userData == null) {
         return Left(ServerFailure("User profile data missing"));
       }
 
-      final String role = userData['role']?.toString() ?? "Customer";
-      final String name = userData['name']?.toString() ?? "Customer";
-      final String userId = userData['user_id']?.toString() ?? "uuid";
+      // 1. Extract Strings safely
+      final String role = userData['role']?.toString() ?? "staff";
+      final String name = userData['name']?.toString() ?? "User";
+      final String userId = userData['user_id']?.toString() ?? "";
 
+      // 2. ✅ Handle the Location Object correctly
+      // Since backend sends {"id": 0, "name": "Default Location"}
+      String locationName = "Default Location";
+      String locationId = "0";
 
-      debugPrint("✅ Parsed Role: $role, Name: $name");
+      if (userData['location'] != null && userData['location'] is Map) {
+        locationName = userData['location']['name']?.toString() ?? "Default Location";
+        locationId = userData['location']['id']?.toString() ?? "0";
+      }
 
+      debugPrint("✅ Parsed Role: $role, Name: $name, Location: $locationName");
+
+      // 3. Save to Storage
       await storage.write(key: 'user_role', value: role);
       await storage.write(key: 'username', value: name);
       await storage.write(key: 'user_id', value: userId);
+      await storage.write(key: 'location_name', value: locationName);
+      await storage.write(key: 'location_id', value: locationId);
 
-      debugPrint("✅ Role saved in storage: $role");
-      debugPrint("✅ name saved in storage: $name");
-      debugPrint("✅ userId saved in storage: $userId");
+      // Returning the map for immediate UI use
+      return Right({
+        'role': role,
+        'name': name,
+        'location': locationName,
+        'location_id': locationId,
+      });
 
-
-
-      return Right({'role': role, 'name': name});
     } on DioException catch (e) {
       return Left(ServerFailure(e.response?.data['message'] ?? "Profile Fetch Failed"));
     } catch (e) {

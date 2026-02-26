@@ -1,15 +1,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:stock_management/features/inventory/presentation/bloc/inventory_product_management_bloc.dart';
-import 'package:stock_management/features/transaction/presentation/bloc/purchase_bloc.dart';
-import 'package:stock_management/features/transaction/presentation/bloc/salse_bloc.dart';
-import 'package:stock_management/features/transaction/presentation/bloc/stock_dashboard_bloc.dart';
+import 'package:stock_management/features/transaction/presentation/pages/salse_bill_screen.dart';
+import 'package:stock_management/features/transaction/presentation/pages/stock_dashboard_view.dart';
+import 'package:stock_management/features/transaction/presentation/pages/stock_plus_screen.dart';
 import '../../core/utils/app_routes.dart';
 import 'core/theme/app_color.dart';
 import 'features/auth/presentation/block/login_bloc.dart';
-import 'features/transaction/presentation/bloc/stock_bloc.dart';
-import 'features/transaction/presentation/bloc/suppier_bloc.dart';
+import 'features/inventory/presentation/bloc/inventory_group_subgroup_bloc.dart';
+import 'features/inventory/presentation/bloc/location_bloc.dart';
 import 'injection.dart';
 
 class MyApp extends StatelessWidget {
@@ -20,12 +19,13 @@ class MyApp extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider<LoginBloc>(create: (context) => sl<LoginBloc>()),
-        BlocProvider(create: (context) => sl<SupplierBloc>()),
-        BlocProvider(create: (context) => sl<PurchaseBloc>()),
-        BlocProvider(create: (context) => sl<InventoryProductBloc>()),
-        BlocProvider(create: (context) => sl<SaleBloc>()),
-        BlocProvider(create: (context) => sl<DashboardStockBloc>()),
-        BlocProvider(create: (context) => sl<StockBloc>()),
+        BlocProvider(create: (context) => sl<StockEntryBloc>()),
+        BlocProvider(create: (_) => sl<ProductGroupBloc>()),
+        BlocProvider(create: (_) => sl<ProductSubGroupBloc>()),
+        BlocProvider(create: (_) => sl<StockEntryBloc>()),
+        BlocProvider(create: (_) => sl<SalesBloc>()),
+        BlocProvider(create: (_) => sl<DashboardBloc>()),
+        BlocProvider(create: (_) => sl<LocationBloc>()),
 
 
       ],
