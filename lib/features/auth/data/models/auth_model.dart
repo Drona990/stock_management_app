@@ -1,17 +1,24 @@
 import '../../domain/entities/user_entity.dart';
 
 class AuthModel {
-  final String access;
-  final String refresh;
+  final String? access; // Nullable banayein
+  final String? refresh; // Nullable banayein
 
-  AuthModel({required this.access, required this.refresh});
+  AuthModel({this.access, this.refresh});
 
   factory AuthModel.fromJson(Map<String, dynamic> json) {
+    // Web Production mein response structure check karein
+    // Agar 'data' key ke andar hai toh wahan se uthayein, warna root se
+    final data = json['data'] as Map<String, dynamic>?;
+
     return AuthModel(
-      access: json['data']['access'],
-      refresh: json['data']['refresh'],
+      access: data != null ? data['access']?.toString() : json['access']?.toString(),
+      refresh: data != null ? data['refresh']?.toString() : json['refresh']?.toString(),
     );
   }
 
-  AuthEntity toEntity() => AuthEntity(accessToken: access, refreshToken: refresh);
+  AuthEntity toEntity() => AuthEntity(
+    accessToken: access ?? "",
+    refreshToken: refresh ?? "",
+  );
 }

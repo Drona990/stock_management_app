@@ -1,4 +1,4 @@
-
+import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pdf/pdf.dart';
@@ -18,16 +18,20 @@ class ReportPrintService {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
+        orientation: pw.PageOrientation.landscape, // ✅ Wide columns ke liye
         build: (context) => [
-          pw.Header(level: 0, child: pw.Text("${title.toUpperCase()} REPORT")),
+          pw.Header(level: 0, child: pw.Text("${title.toUpperCase()} ERP ANALYTICS REPORT")),
           pw.TableHelper.fromTextArray(
-            headers: ['DATE', 'ITEM NAME', 'BARCODE', 'PRICE', 'REMARK'],
+            headers: ['DATE', 'LOCATION', 'ITEM NAME', 'SOLD BY', 'REMARK', 'PRICE'],
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+            cellStyle: const pw.TextStyle(fontSize: 9),
             data: data.map((item) => [
               item['date']?.toString().split('T')[0] ?? '-',
+              item['location_name'] ?? '-',
               item['item_name'] ?? '-',
-              item['barcode_number'] ?? '-',
-              item['price']?.toString() ?? '0',
-              item['sale__bill_no'] ?? item['status'] ?? '-'
+              item['sold_by'] ?? 'Administrator',
+              item['sale__bill_no'] ?? item['status_text'] ?? '-',
+              'Rs. ${item['price']}'
             ]).toList(),
           ),
           pw.SizedBox(height: 20),
@@ -35,23 +39,23 @@ class ReportPrintService {
           pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Text("Total Items: ${data.length}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.Text("Total Amount: ₹${totalAmt.toStringAsFixed(2)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text("Total Records: ${data.length}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text("Net Total: Rs. ${totalAmt.toStringAsFixed(2)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               ]
           )
         ],
       ),
     );
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save(), name: '${title}_Report');
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save(), name: '${title}_ERP_Report');
   }
 }
-
 // ==========================================================================
 // 2. DATA SOURCE FOR PAGINATION
 // ==========================================================================
-class ReportDataSource extends DataTableSource {
+
+class AdvanceReportDataSource extends DataTableSource {
   final List<dynamic> data;
-  ReportDataSource(this.data);
+  AdvanceReportDataSource(this.data);
 
   @override
   DataRow? getRow(int index) {
@@ -59,13 +63,23 @@ class ReportDataSource extends DataTableSource {
     final i = data[index];
     return DataRow(cells: [
       DataCell(Text(i['date']?.toString().split('T')[0] ?? "-", style: const TextStyle(fontSize: 11))),
-      DataCell(Text(i['item_name']?.toString() ?? "-", style: const TextStyle(fontSize: 11))),
-      DataCell(Text(i['barcode_number']?.toString() ?? "-", style: const TextStyle(fontSize: 11))),
-      DataCell(Text("₹${i['price']}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-      DataCell(Text(i['sale__bill_no']?.toString() ?? i['status']?.toString() ?? "N/A", style: const TextStyle(fontSize: 10))),
+      DataCell(Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)),
+        child: Text(i['location_name'] ?? "Main", style: const TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+      )),
+      DataCell(Column(
+        crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(i['item_name'] ?? "-", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          Text("HSN: ${i['hsn'] ?? '-'}", style: const TextStyle(fontSize: 9, color: Colors.grey)),
+        ],
+      )),
+      DataCell(Text(i['sold_by'] ?? "Admin", style: const TextStyle(fontSize: 11))),
+      DataCell(Text(i['sale__bill_no'] ?? i['status_text'] ?? "-", style: const TextStyle(fontSize: 11, color: Colors.blueGrey))),
+      DataCell(Text("₹${i['price']}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green))),
     ]);
   }
-
   @override bool get isRowCountApproximate => false;
   @override int get rowCount => data.length;
   @override int get selectedRowCount => 0;
@@ -120,9 +134,6 @@ class DashboardBloc extends Bloc<DashEvent, DashState> {
   }
 }
 
-// ==========================================================================
-// 4. MAIN UI SCREEN
-// ==========================================================================
 class StockDashboardView extends StatefulWidget {
   const StockDashboardView({super.key});
   @override
@@ -132,6 +143,28 @@ class StockDashboardView extends StatefulWidget {
 class _StockDashboardViewState extends State<StockDashboardView> {
   DateTime _from = DateTime.now();
   DateTime _to = DateTime.now();
+  int? _selectedLocationId;
+  List<dynamic> _locations = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLocations();
+  }
+
+  Future<void> _fetchLocations() async {
+    try {
+      final res = await sl<ApiClient>().get('/api/inventory/locations/');
+      setState(() {
+        // ✅ DJANGO PAGINATION RESULTS KEY HANDLING
+        if (res.data is Map && res.data.containsKey('results')) {
+          _locations = res.data['results'];
+        } else if (res.data is List) {
+          _locations = res.data;
+        }
+      });
+    } catch (e) { log("Location Error: $e"); }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -141,43 +174,58 @@ class _StockDashboardViewState extends State<StockDashboardView> {
         backgroundColor: const Color(0xFFF1F5F9),
         appBar: AppBar(
           backgroundColor: const Color(0xFF0F172A),
-          title: const Text("BUSINESS ANALYTICS", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+          title: const Text("ERP ANALYTICS TERMINAL", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
           actions: [
-            _actionBtn(context, "STOCK REPORT", Colors.blue, () => _showDateDialog(context, "stock")),
-            _actionBtn(context, "SALES REPORT", Colors.green, () => _showDateDialog(context, "sales")),
-            const SizedBox(width: 10),
+            _actionBtn(context, "STOCK REPORT", Colors.blue, () => _showFilterDialog(context, "stock")),
+            _actionBtn(context, "SALES REPORT", Colors.green, () => _showFilterDialog(context, "sales")),
+            const SizedBox(width: 15),
           ],
         ),
         body: BlocBuilder<DashboardBloc, DashState>(
           builder: (context, state) {
             if (state is DashLoading) return const Center(child: CircularProgressIndicator());
             if (state is DashLoaded) return _buildMainDashboard(context, state.data);
-            return const Center(child: Text("Error fetching analytics"));
+            return const Center(child: Text("Connection Error"));
           },
         ),
       ),
     );
   }
 
-  Widget _actionBtn(BuildContext context, String lab, Color col, VoidCallback fn) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
-    child: OutlinedButton(
-      style: OutlinedButton.styleFrom(side: BorderSide(color: col), foregroundColor: col),
-      onPressed: fn, child: Text(lab, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-    ),
-  );
-
-  void _showDateDialog(BuildContext context, String type) {
+  void _showFilterDialog(BuildContext context, String type) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text("Generate ${type.toUpperCase()} Report"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text("REPORT CONFIGURATION (${type.toUpperCase()})"),
         content: StatefulBuilder(builder: (context, setS) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _dateField("From Date", _from, (d) => setS(() => _from = d)),
-            const SizedBox(height: 10),
-            _dateField("To Date", _to, (d) => setS(() => _to = d)),
+            // ✅ DROPDOWN FIX
+            DropdownButtonFormField<int>(
+              isExpanded: true,
+              value: _selectedLocationId,
+              hint: const Text("Select Branch/Location"),
+              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10)),
+              items: [
+                const DropdownMenuItem(value: null, child: Text("Global (All Branches)")),
+                ..._locations.map((loc) => DropdownMenuItem<int>(
+                  value: loc['id'], child: Text(loc['name'].toString()),
+                )).toList(),
+              ],
+              onChanged: (v) {
+                setS(() => _selectedLocationId = v);
+                _selectedLocationId = v;
+              },
+            ),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                Expanded(child: _dateTile("START", _from, (d) => setS(() => _from = d))),
+                const SizedBox(width: 10),
+                Expanded(child: _dateTile("END", _to, (d) => setS(() => _to = d))),
+              ],
+            ),
           ],
         )),
         actions: [
@@ -185,7 +233,7 @@ class _StockDashboardViewState extends State<StockDashboardView> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
             onPressed: () { Navigator.pop(ctx); _fetchDetailed(type); },
-            child: const Text("PROCEED", style: TextStyle(color: Colors.white)),
+            child: const Text("GENERATE REPORT", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -195,85 +243,81 @@ class _StockDashboardViewState extends State<StockDashboardView> {
   void _fetchDetailed(String type) async {
     final start = "${_from.year}-${_from.month.toString().padLeft(2, '0')}-${_from.day.toString().padLeft(2, '0')}";
     final end = "${_to.year}-${_to.month.toString().padLeft(2, '0')}-${_to.day.toString().padLeft(2, '0')}";
-    final res = await sl<ApiClient>().get('/api/inventory/dashboard/detailed_report/', query: {'type': type, 'start_date': start, 'end_date': end});
-    _showPaginatedReport(type, res.data);
+    try {
+      final res = await sl<ApiClient>().get('/api/inventory/dashboard/detailed_report/', query: {
+        'type': type, 'start_date': start, 'end_date': end, 'location': _selectedLocationId?.toString() ?? 'null'
+      });
+      _showFullscreenReport(type, res.data);
+    } catch (e) { log("Fetch Error: $e"); }
   }
 
-  void _showPaginatedReport(String title, List data) {
-    double totalAmt = data.fold(0, (sum, item) => sum + (double.tryParse(item['price'].toString()) ?? 0));
-    final source = ReportDataSource(data);
-
+  void _showFullscreenReport(String title, List data) {
+    final source = AdvanceReportDataSource(data);
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(10),
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.98,
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text("${title.toUpperCase()} REPORT", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text("Total Items: ${data.length} | Total Value: ₹${totalAmt.toStringAsFixed(2)}", style: const TextStyle(fontSize: 11, color: Colors.blueGrey, fontWeight: FontWeight.bold)),
-                  ]),
-                  Row(children: [
-                    IconButton(icon: const Icon(Icons.picture_as_pdf, color: Colors.red), onPressed: () => ReportPrintService.generateReportPDF(title, data)),
-                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
-                  ])
+      builder: (ctx) => Dialog.fullscreen(
+        child: Scaffold(
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF0F172A),
+            title: Text("${title.toUpperCase()} ERP JOURNAL"),
+            actions: [
+              IconButton(icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent), onPressed: () => ReportPrintService.generateReportPDF(title, data)),
+              IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(ctx)),
+            ],
+          ),
+          body: SizedBox(
+            width: double.infinity,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: PaginatedDataTable(
+                header: Text("Audit Logs: ${data.length} records found"),
+                source: source,
+                columnSpacing: 40,
+                horizontalMargin: 20,
+                rowsPerPage: (data.length > 10) ? 10 : (data.length > 0 ? data.length : 1),
+                columns: const [
+                  DataColumn(label: Text("POSTING DATE")),
+                  DataColumn(label: Text("LOCATION")),
+                  DataColumn(label: Text("ITEM DESCRIPTION")),
+                  DataColumn(label: Text("USER/STAFF")),
+                  DataColumn(label: Text("REMARK/DOC")),
+                  DataColumn(label: Text("VALUATION")),
                 ],
               ),
-              const Divider(),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: PaginatedDataTable(
-                    source: source,
-                    columns: const [
-                      DataColumn(label: Text("DATE")),
-                      DataColumn(label: Text("ITEM NAME")),
-                      DataColumn(label: Text("BARCODE")),
-                      DataColumn(label: Text("PRICE")),
-                      DataColumn(label: Text("REMARK")),
-                    ],
-                    rowsPerPage: data.length > 10 ? 10 : (data.length > 0 ? data.length : 1),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildMainDashboard(BuildContext context, DashboardModel d) => SingleChildScrollView(
-    padding: const EdgeInsets.all(20),
-    child: Column(children: [
-      GridView.count(
-        crossAxisCount: 4, shrinkWrap: true, crossAxisSpacing: 15, childAspectRatio: 2.3,
-        children: [
-          _kpi("REVENUE", "₹${d.revenue}", Colors.green, Icons.payments),
-          _kpi("STOCK", "${d.currentStock}", Colors.blue, Icons.inventory),
-          _kpi("SOLD", "${d.itemsSold}", Colors.orange, Icons.shopping_bag),
-          _kpi("DISCOUNT", "₹${d.discountGiven}", Colors.red, Icons.sell),
-        ],
-      ),
-      const SizedBox(height: 25),
-      _recentSalesTable(d.recentSales),
+  // --- HELPERS (Reuse existing methods) ---
+  Widget _kpi(String t, String v, Color c, IconData i) => Container(
+    padding: const EdgeInsets.all(15),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border(left: BorderSide(color: c, width: 4))),
+    child: Row(children: [
+      Icon(i, color: c, size: 22), const SizedBox(width: 12),
+      Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text(t, style: const TextStyle(fontSize: 10, color: Colors.blueGrey, fontWeight: FontWeight.bold)),
+        Text(v, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      ])
     ]),
   );
 
-  Widget _kpi(String t, String v, Color c, IconData i) => Container(
-    padding: const EdgeInsets.all(15),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
-    child: Row(children: [
-      Icon(i, color: c, size: 24), const SizedBox(width: 12),
-      Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(t, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-        Text(v, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      ])
+  Widget _buildMainDashboard(BuildContext context, DashboardModel d) => SingleChildScrollView(
+    padding: const EdgeInsets.all(25),
+    child: Column(children: [
+      GridView.count(
+        crossAxisCount: 4, shrinkWrap: true, crossAxisSpacing: 20, childAspectRatio: 2.5,
+        children: [
+          _kpi("REVENUE", "₹${d.revenue}", Colors.green, Icons.analytics),
+          _kpi("STOCK", "${d.currentStock}", Colors.blue, Icons.inventory_2),
+          _kpi("SOLD", "${d.itemsSold}", Colors.orange, Icons.shopping_bag),
+          _kpi("DISCOUNT", "₹${d.discountGiven}", Colors.red, Icons.discount),
+        ],
+      ),
+      const SizedBox(height: 30),
+      _recentSalesTable(d.recentSales),
     ]),
   );
 
@@ -281,23 +325,33 @@ class _StockDashboardViewState extends State<StockDashboardView> {
     width: double.infinity, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
     child: DataTable(
       headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-      columns: const [DataColumn(label: Text("BILL NO")), DataColumn(label: Text("CUSTOMER")), DataColumn(label: Text("MODE")), DataColumn(label: Text("TOTAL"))],
+      columns: const [DataColumn(label: Text("DOC NO")), DataColumn(label: Text("CUSTOMER")), DataColumn(label: Text("PAYMENT")), DataColumn(label: Text("TOTAL"))],
       rows: sales.map((s) => DataRow(cells: [
-        DataCell(Text(s['bill_no']?.toString() ?? "-")),
-        DataCell(Text(s['customer_name']?.toString() ?? "Cash")),
+        DataCell(Text(s['bill_no']?.toString() ?? "-", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold))),
+        DataCell(Text(s['customer_name']?.toString() ?? "CASH")),
         DataCell(Text(s['payment_mode']?.toString() ?? "CASH")),
         DataCell(Text("₹${s['total_amount']}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green))),
       ])).toList(),
     ),
   );
 
-  Widget _dateField(String lab, DateTime dt, Function(DateTime) onPick) => ListTile(
-    title: Text(lab, style: const TextStyle(fontSize: 12)),
-    subtitle: Text("${dt.day}/${dt.month}/${dt.year}", style: const TextStyle(fontWeight: FontWeight.bold)),
-    trailing: const Icon(Icons.event),
+  Widget _dateTile(String lab, DateTime dt, Function(DateTime) onPick) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    title: Text(lab, style: const TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
+    subtitle: Text("${dt.day}/${dt.month}/${dt.year}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
     onTap: () async {
       final d = await showDatePicker(context: context, firstDate: DateTime(2025), lastDate: DateTime(2030), initialDate: dt);
       if (d != null) onPick(d);
     },
   );
+
+  Widget _actionBtn(BuildContext context, String lab, Color col, VoidCallback fn) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
+    child: OutlinedButton(
+      style: OutlinedButton.styleFrom(side: BorderSide(color: col), foregroundColor: col, backgroundColor: col.withOpacity(0.05)),
+      onPressed: fn, child: Text(lab, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+    ),
+  );
 }
+
+
