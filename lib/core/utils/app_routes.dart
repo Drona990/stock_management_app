@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get_it/get_it.dart';
@@ -8,6 +7,7 @@ import 'package:stock_management/features/inventory/presentation/pages/inventory
 import 'package:stock_management/features/transaction/presentation/pages/stock_dashboard_view.dart';
 import '../../features/main/presentation/pages/bar&resturant/user_management_page.dart';
 import '../../features/transaction/presentation/pages/my_report.dart';
+import '../../features/transaction/presentation/pages/rreturn_exchange_screen.dart';
 import '../../features/transaction/presentation/pages/salse_bill_screen.dart';
 import '../../features/transaction/presentation/pages/stock_plus_screen.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
@@ -87,6 +87,8 @@ class AppRouter {
 
           // 💼 Staff & Admin Accessible Routes
           GoRoute(path: '/sales_bill', builder: (context, state) => const SalesBillingView()),
+          GoRoute(path: '/return', builder: (context, state) => const ReturnExchangeScreen()),
+
 
           // ✅ NEW: My Reports Route (Staff can see their own reports)
           GoRoute(path: '/my_reports', builder: (context, state) => const MyReportsView()),

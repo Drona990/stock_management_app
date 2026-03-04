@@ -7,7 +7,7 @@ class AuthRemoteDataSource {
 
   AuthRemoteDataSource(this.apiClient);
 
-  // 1. Login API
+// 1. Login API
   Future<AuthModel> login(String username, String password) async {
     final Response response = await apiClient.post(
       "/api/auth/login/",
@@ -18,7 +18,11 @@ class AuthRemoteDataSource {
       },
     );
 
-    return AuthModel.fromJson(response.data);
+    if (response.data['success'] == true) {
+      return AuthModel.fromJson(response.data['data']);
+    } else {
+      throw Exception(response.data['message'] ?? "Login Failed");
+    }
   }
 
   Future<void> updateFCMToken(String fcmToken) async {

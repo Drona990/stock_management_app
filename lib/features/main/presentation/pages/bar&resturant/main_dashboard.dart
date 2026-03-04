@@ -92,6 +92,11 @@ class _MainDashboardState extends State<MainDashboard> {
         selectedIcon: Icon(Icons.add_circle_outline, color: cyanPrimary),
         label: Text("Sales Bill"),
       ),
+      const NavigationRailDestination(
+        icon: Icon(Icons.assignment_return),
+        selectedIcon: Icon(Icons.assignment_return, color: cyanPrimary),
+        label: Text("Return Exchange"),
+      ),
       // Admin gets "My Reports" too
       const NavigationRailDestination(
         icon: Icon(Icons.assessment_outlined),
@@ -111,6 +116,7 @@ class _MainDashboardState extends State<MainDashboard> {
     if (location.contains('inventory')) return _findLabelIndex(destinations, 'Inventory');
     if (location.contains('stock_plus')) return _findLabelIndex(destinations, 'Stock Plus');
     if (location.contains('sales_bill')) return _findLabelIndex(destinations, 'Sales Bill');
+    if (location.contains('return')) return _findLabelIndex(destinations, 'Return Exchange');
     if (location.contains('my_reports')) return _findLabelIndex(destinations, 'My Reports');
     if (location.contains('dashboard')) return _findLabelIndex(destinations, 'Dashboard');
 
@@ -177,6 +183,7 @@ class _MainDashboardState extends State<MainDashboard> {
       case 'Inventory': context.go('/inventory'); break;
       case 'Stock Plus': context.go('/stock_plus'); break;
       case 'Sales Bill': context.go('/sales_bill'); break;
+      case 'Return Exchange': context.go('/return'); break;
       case 'My Reports': context.go('/my_reports'); break; // ✅ Navigation Added
     }
   }

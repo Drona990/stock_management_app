@@ -5,6 +5,8 @@ import 'package:stock_management/features/inventory/presentation/bloc/location_b
 import 'package:stock_management/features/transaction/presentation/pages/salse_bill_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_plus_screen.dart';
 
+import '../transaction/presentation/pages/rreturn_exchange_screen.dart';
+
 
 
 Future<void> initInventoryInjection(GetIt sl) async {
@@ -31,6 +33,9 @@ Future<void> initInventoryInjection(GetIt sl) async {
 
   sl.registerLazySingleton<SalesRepository>(() => SalesRepository());
   sl.registerFactory(() => SalesBloc(sl<SalesRepository>()));
+
+  sl.registerLazySingleton<ReturnRepository>(() => ReturnRepository());
+  sl.registerFactory(() => ReturnBloc(sl<ReturnRepository>()));
 
 
 

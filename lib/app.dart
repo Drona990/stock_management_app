@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:stock_management/features/transaction/presentation/pages/rreturn_exchange_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/salse_bill_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_dashboard_view.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_plus_screen.dart';
@@ -26,8 +27,7 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (_) => sl<SalesBloc>()),
         BlocProvider(create: (_) => sl<DashboardBloc>()),
         BlocProvider(create: (_) => sl<LocationBloc>()),
-
-
+        BlocProvider(create: (_) => sl<ReturnBloc>()),
       ],
       child: MaterialApp.router(
         debugShowCheckedModeBanner: false,
