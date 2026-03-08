@@ -159,9 +159,9 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
 
                 Row(
                   children: [
-                    Expanded(child: _buildField("FIRST NAME", _firstNameController, "Drona", Icons.badge_outlined)),
+                    Expanded(child: _buildField("FIRST NAME", _firstNameController, "First Name", Icons.badge_outlined)),
                     const SizedBox(width: 16),
-                    Expanded(child: _buildField("LAST NAME", _lastNameController, "Tandi", Icons.badge_outlined)),
+                    Expanded(child: _buildField("LAST NAME", _lastNameController, "Last Name", Icons.badge_outlined)),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -176,7 +176,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
 
                 Row(
                   children: [
-                    Expanded(child: _buildField("PHONE NUMBER", _phoneController, "9876543210", Icons.phone_android_outlined)),
+                    Expanded(child: _buildField("PHONE NUMBER", _phoneController, "0000000000", Icons.phone_android_outlined)),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(

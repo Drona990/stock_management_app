@@ -130,7 +130,7 @@ class SalesBillingView extends StatefulWidget {
 
 class _SalesBillingViewState extends State<SalesBillingView> {
   final _scanCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController(text: "CASH");
+  final _nameCtrl = TextEditingController(text: "Unknown");
   final _mobileCtrl = TextEditingController();
   final _discCtrl = TextEditingController(text: "0");
   final _freightCtrl = TextEditingController(text: "0");

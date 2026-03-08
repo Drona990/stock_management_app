@@ -1,6 +1,7 @@
 
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/inventory_category.dart';
 import '../bloc/inventory_group_subgroup_bloc.dart';
@@ -184,14 +185,13 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
   // ==========================================================================
 
   void _showGroupForm(BuildContext context, ProductGroupBloc bloc, {ProductGroupEntity? group}) {
-    // Current category bloc ka reference lein
     final categoryBloc = context.read<InventoryCategoryBloc>();
 
     int? selectedCatId;
     final hsnCtrl = TextEditingController(text: group?.hsnCode);
-    final sgstCtrl = TextEditingController(text: group?.sgst.toString() ?? "0");
-    final cgstCtrl = TextEditingController(text: group?.cgst.toString() ?? "0");
-    final igstCtrl = TextEditingController(text: group?.igst.toString() ?? "0");
+    final sgstCtrl = TextEditingController(text: group?.sgst.toString() ?? "0.0");
+    final cgstCtrl = TextEditingController(text: group?.cgst.toString() ?? "0.0");
+    final igstCtrl = TextEditingController(text: group?.igst.toString() ?? "0.0");
 
     void updateIGST() {
       double s = double.tryParse(sgstCtrl.text) ?? 0;
@@ -203,7 +203,6 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
       context: context,
       builder: (ctx) => MultiBlocProvider(
         providers: [
-          // Yeh dono line provider error ko solve karengi
           BlocProvider.value(value: bloc),
           BlocProvider.value(value: categoryBloc),
         ],
@@ -220,7 +219,6 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
                       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 24),
 
-                  // Group Dropdown from Category Bloc
                   BlocBuilder<InventoryCategoryBloc, InventoryCategoryState>(
                     builder: (context, state) {
                       List<InventoryCategoryEntity> categories = state is InvCategoryLoaded ? state.categories : [];
@@ -234,14 +232,17 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
                   ),
 
                   const SizedBox(height: 12),
-                  _buildField(hsnCtrl, "e.g. 5208", label: "HSN Code"),
+                  // ✅ HSN Code: Only digits keyboard
+                  _buildField(hsnCtrl, "e.g. 5208", label: "HSN Code", isOnlyDigits: true),
                   const SizedBox(height: 12),
+
+                  // ✅ TAX FIELDS: Decimal keyboard
                   Row(children: [
-                    Expanded(child: _buildField(sgstCtrl, "0.0", label: "SGST %", onChanged: (_) => updateIGST())),
+                    Expanded(child: _buildField(sgstCtrl, "0.0", label: "SGST %", onChanged: (_) => updateIGST(), isDecimal: true)),
                     const SizedBox(width: 8),
-                    Expanded(child: _buildField(cgstCtrl, "0.0", label: "CGST %", onChanged: (_) => updateIGST())),
+                    Expanded(child: _buildField(cgstCtrl, "0.0", label: "CGST %", onChanged: (_) => updateIGST(), isDecimal: true)),
                     const SizedBox(width: 8),
-                    Expanded(child: _buildField(igstCtrl, "0.0", label: "IGST %", readOnly: true)),
+                    Expanded(child: _buildField(igstCtrl, "0.0", label: "IGST %", readOnly: true, isDecimal: true)),
                   ]),
                   const SizedBox(height: 24),
 
@@ -255,19 +256,37 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
                         ),
                         onPressed: () {
-                          if (selectedCatId != null) {
-                            final catState = categoryBloc.state as InvCategoryLoaded;
-                            final catName = catState.categories.firstWhere((e) => e.id == selectedCatId).name;
+                          final sVal = double.tryParse(sgstCtrl.text);
+                          final cVal = double.tryParse(cgstCtrl.text);
 
-                            final entity = ProductGroupEntity(
-                              name: catName, hsnCode: hsnCtrl.text,
-                              sgst: double.parse(sgstCtrl.text),
-                              cgst: double.parse(cgstCtrl.text),
-                              igst: double.parse(igstCtrl.text),
-                            );
-                            group == null ? bloc.add(AddGroup(entity)) : bloc.add(EditGroup(group.id!, entity));
-                            Navigator.pop(ctx);
+                          if (selectedCatId == null) {
+                            _showTopError(context, "Please select a Group Name");
+                            return;
                           }
+
+                          if (sVal == null || sVal < 0 || sVal > 100) {
+                            _showTopError(context, "Invalid SGST. Must be 0-100");
+                            return;
+                          }
+
+                          if (cVal == null || cVal < 0 || cVal > 100) {
+                            _showTopError(context, "Invalid CGST. Must be 0-100");
+                            return;
+                          }
+
+                          final catState = categoryBloc.state as InvCategoryLoaded;
+                          final catName = catState.categories.firstWhere((e) => e.id == selectedCatId).name;
+
+                          final entity = ProductGroupEntity(
+                            name: catName,
+                            hsnCode: hsnCtrl.text,
+                            sgst: sVal,
+                            cgst: cVal,
+                            igst: sVal + cVal,
+                          );
+
+                          group == null ? bloc.add(AddGroup(entity)) : bloc.add(EditGroup(group.id!, entity));
+                          Navigator.pop(ctx);
                         },
                         child: const Text("SAVE DATA")
                     )),
@@ -276,6 +295,42 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ✅ Updated Helper with Keyboard & Formatter logic
+  Widget _buildField(TextEditingController ctrl, String hint, {
+    String? label,
+    Function(String)? onChanged,
+    bool readOnly = false,
+    bool isDecimal = false,
+    bool isOnlyDigits = false,
+  }) {
+    return TextField(
+      controller: ctrl,
+      onChanged: onChanged,
+      readOnly: readOnly,
+      // ⌨️ Keyboard selection
+      keyboardType: isDecimal
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : (isOnlyDigits ? TextInputType.number : TextInputType.text),
+      // 🚫 Input Formatters to block invalid characters
+      inputFormatters: [
+        if (isOnlyDigits) FilteringTextInputFormatter.digitsOnly,
+        if (isDecimal) FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+      ],
+      decoration: _inputDecoration(hint, label: label),
+    );
+  }
+  // Helper method to show error
+  void _showTopError(BuildContext context, String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red.shade800,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(20),
       ),
     );
   }
@@ -426,9 +481,6 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
     ));
   }
 
-  Widget _buildField(TextEditingController ctrl, String hint, {String? label, Function(String)? onChanged, bool readOnly = false}) {
-    return TextField(controller: ctrl, onChanged: onChanged, readOnly: readOnly, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: _inputDecoration(hint, label: label));
-  }
 
   InputDecoration _inputDecoration(String hint, {String? label}) {
     return InputDecoration(

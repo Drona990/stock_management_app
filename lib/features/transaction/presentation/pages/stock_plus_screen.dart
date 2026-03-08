@@ -1,6 +1,7 @@
 
 import 'dart:developer';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -214,6 +215,17 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
     _costPriceCtrl.text = cost.toStringAsFixed(2);
   }
 
+  // ✅ CUSTOM SNACKBAR HELPER
+  void _showMsg(String msg, {bool isError = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: isError ? Colors.red.shade800 : Colors.green.shade800,
+          behavior: SnackBarBehavior.floating,
+        )
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<StockEntryBloc, StockEntryState>(
@@ -222,17 +234,14 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
           showDialog(
             context: context,
             barrierDismissible: false,
-            useRootNavigator: true, // ✅ Important: Root navigator ka use karein
+            useRootNavigator: true,
             builder: (_) => const Center(child: CircularProgressIndicator()),
           );
         } else if (state is StockEntrySuccess) {
           _hideLoading(context);
-
           if (state.savedData.rawResponse != null) {
             LabelPrintingService.generateAndPrintLabels(state.savedData.rawResponse!);
           }
-
-
           setState(() {
             recentEntries.insert(0, state.savedData);
             _withGstCtrl.clear();
@@ -242,16 +251,10 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
             selectedGroup = null;
             selectedSubGroup = null;
           });
-
-
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Stock Saved Successfully"), backgroundColor: Colors.green)
-          );
+          _showMsg("Stock Added & Labels Sent to Printer", isError: false);
         } else if (state is StockEntryError) {
-          _hideLoading(context); // ✅ Error mein bhi loading band karein
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.error), backgroundColor: Colors.red)
-          );
+          _hideLoading(context);
+          _showMsg(state.error);
         }
       },
       child: Scaffold(
@@ -298,12 +301,13 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
         children: [
           ElevatedButton.icon(
             onPressed: _onSave,
-            icon: const Icon(Icons.save),
+            icon: const Icon(Icons.print_rounded),
             label: const Text("SAVE & PRINT LABELS"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade700,
+              backgroundColor: const Color(0xFF0F172A),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
           ),
         ],
@@ -327,13 +331,13 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _tf(_noOfPcsCtrl, "NO OF PIECES")),
+              Expanded(child: _tf(_noOfPcsCtrl, "NO OF PIECES", isDecimal: false)),
               const SizedBox(width: 12),
-              Expanded(child: _tf(_pcsCtrl, "PCS")),
+              Expanded(child: _tf(_pcsCtrl, "PCS PER UNIT", isDecimal: false)),
             ],
           ),
           const SizedBox(height: 16),
-          _tf(_withGstCtrl, "WITH GST PRICE", onChange: (_) => _calculatePrice()),
+          _tf(_withGstCtrl, "PRICE WITH GST", isDecimal: true, onChange: (_) => _calculatePrice()),
           const SizedBox(height: 16),
           _tf(_costPriceCtrl, "COST PRICE (AUTO)", readOnly: true),
         ],
@@ -349,8 +353,8 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
 
         return DropdownButtonFormField<ProductGroupEntity>(
           value: groups.any((e) => e.id == selectedGroup?.id) ? selectedGroup : null,
-          decoration: _deco("GROUP NAME"),
-          hint: const Text("Select Product Group"),
+          decoration: _deco("PRODUCT GROUP"),
+          hint: const Text("Select Group"),
           items: groups.map((g) => DropdownMenuItem(value: g, child: Text(g.name))).toList(),
           onChanged: (val) {
             if (val != null) {
@@ -375,8 +379,8 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
 
         return DropdownButtonFormField<ProductSubGroupEntity>(
           value: subGroups.any((e) => e.id == selectedSubGroup?.id) ? selectedSubGroup : null,
-          decoration: _deco("SUB NAME"),
-          hint: const Text("Select Sub Group"),
+          decoration: _deco("SUB MASTER"),
+          hint: const Text("Select Sub-Group"),
           items: subGroups.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
           onChanged: (val) => setState(() => selectedSubGroup = val),
         );
@@ -388,18 +392,24 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.yellow.shade100,
+        color: Colors.amber.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
+        border: Border.all(color: Colors.amber.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("GST & HSN INFO", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown)),
-          const Divider(color: Colors.orange),
-          _taxRow("SGST", "${selectedGroup?.sgst ?? 0.0}%"),
-          _taxRow("CGST", "${selectedGroup?.cgst ?? 0.0}%"),
-          _taxRow("HSN CODE", selectedGroup?.hsnCode ?? "-"),
+          const Row(
+            children: [
+              Icon(Icons.receipt_long, size: 16, color: Colors.orange),
+              SizedBox(width: 8),
+              Text("GST & HSN SUMMARY", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown)),
+            ],
+          ),
+          const Divider(height: 25),
+          _taxRow("SGST RATE", "${selectedGroup?.sgst ?? 0.0}%"),
+          _taxRow("CGST RATE", "${selectedGroup?.cgst ?? 0.0}%"),
+          _taxRow("HSN CODE", selectedGroup?.hsnCode ?? "N/A"),
         ],
       ),
     );
@@ -411,23 +421,24 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
-            color: Colors.blueGrey.shade900,
-            child: const SafeArea(child: Center(child: Text("RECENT ENTRIES", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))),
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            color: const Color(0xFF0F172A),
+            child: const Center(child: Text("RECENT ADDITIONS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
           ),
           Expanded(
             child: recentEntries.isEmpty
-                ? const Center(child: Text("No entries yet"))
+                ? const Center(child: Text("History is empty"))
                 : ListView.separated(
               itemCount: recentEntries.length,
-              separatorBuilder: (_, __) => const Divider(),
+              separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (ctx, index) {
                 final item = recentEntries[index];
                 return ListTile(
-                  title: Text("HSN: ${item.hsnCode}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                  leading: const CircleAvatar(backgroundColor: Colors.blueGrey, child: Icon(Icons.inventory, size: 16, color: Colors.white)),
+                  title: Text(item.hsnCode, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text("Qty: ${item.noOfPieces} | ₹${item.priceWithGst}"),
                   trailing: IconButton(
-                    icon: const Icon(Icons.print, color: Colors.blue),
+                    icon: const Icon(Icons.print, color: Colors.blueAccent),
                     onPressed: () => LabelPrintingService.generateAndPrintLabels(item.rawResponse!),
                   ),
                 );
@@ -439,36 +450,77 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
     );
   }
 
-  InputDecoration _deco(String l) => InputDecoration(labelText: l, border: const OutlineInputBorder());
+  InputDecoration _deco(String l) => InputDecoration(
+    labelText: l,
+    labelStyle: const TextStyle(fontSize: 12),
+    border: const OutlineInputBorder(),
+    filled: true,
+    fillColor: Colors.grey.shade50,
+  );
 
-  Widget _tf(TextEditingController c, String l, {bool readOnly = false, Function(String)? onChange}) => TextField(
+  // ✅ ENHANCED TEXTFIELD WITH NUMBER FORMATTERS
+  Widget _tf(TextEditingController c, String l, {bool readOnly = false, bool isDecimal = true, Function(String)? onChange}) {
+    return TextField(
       controller: c,
       readOnly: readOnly,
       onChanged: onChange,
+      style: const TextStyle(fontWeight: FontWeight.bold),
       decoration: _deco(l),
-      keyboardType: const TextInputType.numberWithOptions(decimal: true));
+      // ✅ Dynamic Keyboard Type
+      keyboardType: TextInputType.numberWithOptions(decimal: isDecimal),
+      // ✅ Digit/Decimal Only Formatters
+      inputFormatters: [
+        if (isDecimal)
+          FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')) // Decimals up to 2 places
+        else
+          FilteringTextInputFormatter.digitsOnly // Integers only
+      ],
+    );
+  }
 
   Widget _taxRow(String l, String v) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l), Text(v, style: const TextStyle(fontWeight: FontWeight.bold))]));
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l, style: const TextStyle(color: Colors.grey, fontSize: 12)), Text(v, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))]));
 
+  // ✅ COMPREHENSIVE FORM VALIDATION
   void _onSave() {
-    if (selectedGroup == null || selectedSubGroup == null || _withGstCtrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+    if (selectedGroup == null || selectedSubGroup == null) {
+      _showMsg("Please select both Product Group and Sub-Group");
       return;
     }
+
+    final int? noOfPieces = int.tryParse(_noOfPcsCtrl.text);
+    final int? pcsPerUnit = int.tryParse(_pcsCtrl.text);
+    final double? withGst = double.tryParse(_withGstCtrl.text);
+
+    if (noOfPieces == null || noOfPieces <= 0) {
+      _showMsg("Please enter a valid Quantity (greater than 0)");
+      return;
+    }
+
+    if (pcsPerUnit == null || pcsPerUnit < 1) {
+      _showMsg("Pieces per unit must be at least 1");
+      return;
+    }
+
+    if (withGst == null || withGst <= 0) {
+      _showMsg("Please enter a valid Price");
+      return;
+    }
+
     final entity = StockTransactionEntity(
       groupId: selectedGroup!.id!,
       subGroupId: selectedSubGroup!.id!,
-      noOfPieces: int.tryParse(_noOfPcsCtrl.text) ?? 0,
-      pcsPerUnit: int.tryParse(_pcsCtrl.text) ?? 1,
-      priceWithGst: double.tryParse(_withGstCtrl.text) ?? 0.0,
+      noOfPieces: noOfPieces,
+      pcsPerUnit: pcsPerUnit,
+      priceWithGst: withGst,
       costPrice: double.tryParse(_costPriceCtrl.text) ?? 0.0,
       sgstRate: selectedGroup?.sgst ?? 0.0,
       cgstRate: selectedGroup?.cgst ?? 0.0,
       igstRate: (selectedGroup?.sgst ?? 0.0) + (selectedGroup?.cgst ?? 0.0),
       hsnCode: selectedGroup?.hsnCode ?? "",
     );
+
     context.read<StockEntryBloc>().add(SaveStockEntry(entity));
   }
 }
