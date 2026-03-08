@@ -136,10 +136,6 @@ class _LocationViewState extends State<LocationView> {
                     icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.orange),
                     onPressed: () => _showFormDialog(context, bloc, location: location)
                 ),
-                IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    onPressed: () => _confirmDelete(context, location.id!, bloc)
-                ),
               ],
             ),
           ),
@@ -217,26 +213,6 @@ class _LocationViewState extends State<LocationView> {
           fillColor: const Color(0xFFF8F9FA),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none)
       ),
-    );
-  }
-
-  void _confirmDelete(BuildContext context, int id, LocationBloc bloc) {
-    showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text("Delete Location?"),
-          content: const Text("Are you sure? Items currently assigned here will no longer have a valid location link."),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-            TextButton(
-                onPressed: () {
-                  bloc.add(DeleteLocation(id));
-                  Navigator.pop(ctx);
-                },
-                child: const Text("Delete", style: TextStyle(color: Colors.red))
-            ),
-          ],
-        )
     );
   }
 }

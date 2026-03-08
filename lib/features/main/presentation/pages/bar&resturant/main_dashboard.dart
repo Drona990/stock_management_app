@@ -154,7 +154,6 @@ class _MainDashboardState extends State<MainDashboard> {
             minExtendedWidth: 200,
             selectedIndex: selectedIndex >= destinations.length ? 0 : selectedIndex,
             onDestinationSelected: (int index) => _onItemTapped(index, context, destinations),
-            leading: _buildLeading(isExtended),
             trailing: Expanded(
               child: Align(
                 alignment: Alignment.bottomCenter,

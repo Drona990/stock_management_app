@@ -97,7 +97,6 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
         children: [
           Expanded(flex: 2, child: Text("GROUP & HSN", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
           Expanded(flex: 1, child: Text("TAX (%)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-          Expanded(flex: 1, child: Text("ACTIONS", textAlign: TextAlign.end, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
         ],
       ),
       child: ListView.separated(
@@ -114,10 +113,6 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
                   Text("HSN: ${item.hsnCode ?? '-'}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 ])),
                 Expanded(flex: 1, child: Text("S: ${item.sgst}% | C: ${item.cgst}% | I: ${item.igst}%")),
-                Expanded(flex: 1, child: _buildRowActions(
-                  onEdit: () => _showGroupForm(context, bloc, group: item),
-                  onDelete: () => bloc.add(DeleteGroup(item.id!)),
-                )),
               ],
             ),
           );
@@ -175,7 +170,6 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
                 Expanded(flex: 2, child: Text(item.groupName ?? "N/A", style: const TextStyle(color: Colors.blueGrey))),
                 Expanded(flex: 1, child: _buildRowActions(
                   onEdit: () => _showSubForm(context, bloc, subGroup: item),
-                  onDelete: () => bloc.add(DeleteSubGroup(item.id!)),
                 )),
               ],
             ),
@@ -409,10 +403,9 @@ class _InventoryGroupSubgroupViewState extends State<InventoryGroupSubgroupView>
     );
   }
 
-  Widget _buildRowActions({required VoidCallback onEdit, required VoidCallback onDelete}) {
+  Widget _buildRowActions({required VoidCallback onEdit}) {
     return Row(mainAxisAlignment: MainAxisAlignment.end, children: [
       IconButton(icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.orange), onPressed: onEdit),
-      IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red), onPressed: onDelete),
     ]);
   }
 

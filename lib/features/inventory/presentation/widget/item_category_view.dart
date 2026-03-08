@@ -139,10 +139,6 @@ class _CategoryViewState extends State<CategoryView> {
                     icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.orange),
                     onPressed: () => _showFormDialog(context, bloc, category: cat)
                 ),
-                IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    onPressed: () => _confirmDelete(context, cat.id!, bloc)
-                ),
               ],
             ),
           ),
@@ -228,7 +224,7 @@ class _CategoryViewState extends State<CategoryView> {
     );
   }
 
-  void _confirmDelete(BuildContext context, int id, InventoryCategoryBloc bloc) {
+  void _confirmDelete1(BuildContext context, int id, InventoryCategoryBloc bloc) {
     showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
