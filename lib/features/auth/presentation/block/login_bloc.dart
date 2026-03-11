@@ -9,6 +9,10 @@ class LoginSubmitted extends LoginEvent {
   final String password;
   LoginSubmitted(this.login, this.password);
 }
+class SwitchUserRequested extends LoginEvent {
+  final String userId; // ✅ int ko String kar diya
+  SwitchUserRequested(this.userId);
+}
 
 // States
 abstract class LoginState {}
@@ -27,6 +31,16 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   final AuthRepository repository;
 
   LoginBloc(this.repository) : super(LoginInitial()) {
+
+    on<SwitchUserRequested>((event, emit) async {
+      emit(LoginLoading());
+      final result = await repository.switchUser(event.userId);
+      result.fold(
+            (failure) => emit(LoginFailure(failure.message)),
+            (auth) => emit(LoginSuccess(auth)), // Ye app ko dashboard pe reload kar dega
+      );
+    });
+
     on<LoginSubmitted>((event, emit) async {
       emit(LoginLoading());
 

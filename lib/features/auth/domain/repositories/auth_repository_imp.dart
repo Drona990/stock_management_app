@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import '../../../../core/error/failures.dart';
 import '../../data/data_source/auth_remote_data_source.dart';
+import '../../data/models/auth_model.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 
@@ -122,6 +123,35 @@ class AuthRepositoryImpl implements AuthRepository {
       }
     } catch (e) {
       debugPrint("FCM Update Error: $e");
+    }
+  }
+
+  @override
+  Future<Either<Failure, AuthEntity>> switchUser(String targetUserId) async {
+    try {
+      final response = await remoteDataSource.apiClient.post(
+        "/api/auth/silent-switch/",
+        data: {"user_id": targetUserId},
+      );
+
+      if (response.data['success'] == true) {
+        final model = AuthModel.fromJson(response.data['data']);
+
+        // 1. Tokens overwrite karein
+        await storage.write(key: 'access_token', value: model.access);
+        await storage.write(key: 'refresh_token', value: model.refresh);
+
+        // 2. DI update karein (Aapka existing method)
+        _updateDI(model.access!, model.refresh!);
+
+        // 3. 🔥 ZAROORI: Naye staff ka Profile (Role, Name, Location) Sync karein
+        await getUserProfile();
+
+        return Right(model.toEntity());
+      }
+      return Left(ServerFailure("Identity Switch Failed"));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
     }
   }
 

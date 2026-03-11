@@ -8,9 +8,8 @@ class PrintService {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80, // Standard 80mm Thermal Paper
+        pageFormat: PdfPageFormat.roll80,
         build: (pw.Context context) {
-          // Calculation Logic for Footer
           double subtotal = 0;
           List items = billData['items'] ?? [];
           for (var item in items) {
@@ -32,6 +31,14 @@ class PrintService {
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
                 ),
                 pw.SizedBox(height: 5),
+
+                // Location & Staff Info
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text("Loc : ${billData['location_name'] ?? 'N/A'}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                  pw.Text("Staff: ${billData['sold_by_name'] ?? 'N/A'}", style: pw.TextStyle(fontSize: 8)),
+                ]),
+
+                pw.SizedBox(height: 2),
                 pw.Text("Bill No : ${billData['bill_no']}", style: pw.TextStyle(fontSize: 8)),
                 pw.Text("Date    : ${billData['bill_date']}", style: pw.TextStyle(fontSize: 8)),
                 pw.Text("Cust    : ${billData['customer_name']}", style: pw.TextStyle(fontSize: 8)),
@@ -40,7 +47,6 @@ class PrintService {
                 // --- Table Header ---
                 pw.Row(children: [
                   pw.Expanded(flex: 4, child: pw.Text("ITEM / BARCODE", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                  // FIXED: Changed 'textAlig' to 'textAlign' and moved it outside TextStyle
                   pw.Expanded(flex: 2, child: pw.Text("TAXABLE", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
                   pw.Expanded(flex: 2, child: pw.Text("GST", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
                   pw.Expanded(flex: 2, child: pw.Text("TOTAL", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
@@ -66,7 +72,6 @@ class PrintService {
                             pw.Text("(${item['barcode_number']})", style: pw.TextStyle(fontSize: 6)),
                           ]
                       )),
-                      // FIXED: Alignment moved to Text property
                       pw.Expanded(flex: 2, child: pw.Text(taxable.toStringAsFixed(2), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7))),
                       pw.Expanded(flex: 2, child: pw.Text(totalGst.toStringAsFixed(2), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7))),
                       pw.Expanded(flex: 2, child: pw.Text(rate.toStringAsFixed(2), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
@@ -82,7 +87,6 @@ class PrintService {
                   pw.Text("Rs. ${subtotal.toStringAsFixed(2)}", style: pw.TextStyle(fontSize: 8)),
                 ]),
 
-                // RED LINE FOR DISCOUNT
                 if (discPercent > 0)
                   pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
                     pw.Text("Discount ($discPercent%):",
@@ -105,8 +109,27 @@ class PrintService {
                 pw.Text("Amount in words:", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                 pw.Text("${billData['amount_in_words']}", style: pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic)),
 
+                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+
+                // ✅ NEW: Terms & Conditions Section
+                pw.SizedBox(height: 5),
+                pw.Text("TERMS & CONDITIONS:", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                pw.Bullet(text: "Goods once sold will not be taken back.", style: pw.TextStyle(fontSize: 6)),
+                pw.Bullet(text: "Exchange valid within 7 days with original bill.", style: pw.TextStyle(fontSize: 6)),
+                pw.Bullet(text: "Warranty as per manufacturer terms only.", style: pw.TextStyle(fontSize: 6)),
+
                 pw.SizedBox(height: 15),
-                pw.Center(child: pw.Text("--- THANK YOU! VISIT AGAIN ---", style: pw.TextStyle(fontSize: 8))),
+                pw.Center(
+                  child: pw.Column(
+                    children: [
+                      pw.Text("--- THANK YOU! VISIT AGAIN ---",
+                          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 2),
+                      pw.Text("Powered by Svenska Solution",
+                          style: pw.TextStyle(fontSize: 6, color: PdfColors.grey)),
+                    ],
+                  ),
+                ),
                 pw.SizedBox(height: 10),
               ],
             ),
@@ -115,7 +138,6 @@ class PrintService {
       ),
     );
 
-    // Opening System Print Dialog
     await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
         name: 'Bill_${billData['bill_no']}'
