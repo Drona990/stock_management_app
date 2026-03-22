@@ -221,11 +221,46 @@ class PerformanceModal {
     onChanged: onChange, decoration: _inputDeco("Month"),
   ));
 
-  static Widget _compactLocDrop(int? val, List items, Function(int?) onChange) => SizedBox(height: 38, child: DropdownButtonFormField<int?>(
+  static Widget _compactLocDrop1(int? val, List items, Function(int?) onChange) => SizedBox(height: 38, child: DropdownButtonFormField<int?>(
     value: val, style: const TextStyle(fontSize: 12, color: Colors.black),
-    items: [const DropdownMenuItem(value: null, child: Text("All Branch", style: TextStyle(fontSize: 12))), ...items.map((l) => DropdownMenuItem(value: l['id'] as int, child: Text(l['name'], style: const TextStyle(fontSize: 12))))],
+    items: [const DropdownMenuItem(value: null, child: Text("Location", style: TextStyle(fontSize: 12))), ...items.map((l) => DropdownMenuItem(value: l['id'] as int, child: Text(l['name'], style: const TextStyle(fontSize: 12))))],
     onChanged: onChange, decoration: _inputDeco("Branch"),
   ));
+
+  static Widget _compactLocDrop(int? val, List items, Function(int?) onChange) => SizedBox(
+    height: 38,
+    child: DropdownButtonFormField<int?>(
+      value: val,
+      // ✅ isExpanded ensures the dropdown takes only the available width of the SizedBox
+      isExpanded: true,
+      style: const TextStyle(fontSize: 12, color: Colors.black),
+      // ✅ DropdownMenuItem child wrapped in Text with overflow handling
+      items: [
+        const DropdownMenuItem(
+          value: null,
+          child: Text(
+            "All Locations",
+            style: TextStyle(fontSize: 12),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        ...items.map((l) => DropdownMenuItem(
+          value: l['id'] as int,
+          child: Text(
+            l['name'].toString(),
+            style: const TextStyle(fontSize: 12),
+            overflow: TextOverflow.ellipsis, // ✅ Prevents overflow if branch name is long
+          ),
+        )),
+      ],
+      onChanged: onChange,
+      // ✅ Align the icon and text to look better in compact mode
+      iconSize: 20,
+      decoration: _inputDeco("Branch").copyWith(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+      ),
+    ),
+  );
 
   static InputDecoration _inputDeco(String l) => InputDecoration(filled: true, fillColor: const Color(0xFFF8FAFC), hintText: l, contentPadding: const EdgeInsets.symmetric(horizontal: 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE2E8F0))));
 }

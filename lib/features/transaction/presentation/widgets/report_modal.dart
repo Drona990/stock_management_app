@@ -54,7 +54,7 @@ class ReportModal {
               body: Column(
                 children: [
                   // --- 🔍 FILTER & SEARCH BAR SECTION ---
-                  Container(
+                  /*Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     color: Colors.white,
@@ -96,6 +96,78 @@ class ReportModal {
                             const SizedBox(width: 8),
                             _filterChip(setS, "SOLD", activeStatus == "SOLD", () => activeStatus = "SOLD"),
                           ],
+                        )
+                      ],
+                    ),
+                  ),*/
+
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    color: Colors.white,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start, // Align to start for mobile
+                      children: [
+                        // --- Row 1: KPI and Search Bar ---
+                        LayoutBuilder(builder: (context, constraints) {
+                          bool isMobile = constraints.maxWidth < 600;
+
+                          return Wrap(
+                            spacing: 16,
+                            runSpacing: 16,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              // KPI Section
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _headerKpi("TOTAL", "${data.length}", Icons.analytics, Colors.indigo),
+                                  const SizedBox(width: 16),
+                                  _headerKpi("FILTERED", "${filteredData.length}", Icons.filter_alt, Colors.orange),
+                                ],
+                              ),
+
+                              // Search Bar (Full width on mobile, 300px on Desktop)
+                              SizedBox(
+                                width: isMobile ? double.infinity : 300,
+                                height: 40,
+                                child: TextField(
+                                  onChanged: (v) => setS(() => searchQuery = v),
+                                  decoration: InputDecoration(
+                                    hintText: "Search Barcode...",
+                                    prefixIcon: const Icon(Icons.search, size: 20),
+                                    filled: true,
+                                    fillColor: const Color(0xFFF1F5F9),
+                                    border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide.none
+                                    ),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+
+                        const SizedBox(height: 16),
+
+                        // --- Row 2: Quick Status Chips (Scrollable for Mobile) ---
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              const Text("Status: ",
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)
+                              ),
+                              const SizedBox(width: 8),
+                              _filterChip(setS, "ALL", activeStatus == "ALL", () => activeStatus = "ALL"),
+                              const SizedBox(width: 8),
+                              _filterChip(setS, "IN STOCK", activeStatus == "IN STOCK", () => activeStatus = "IN STOCK"),
+                              const SizedBox(width: 8),
+                              _filterChip(setS, "SOLD", activeStatus == "SOLD", () => activeStatus = "SOLD"),
+                            ],
+                          ),
                         )
                       ],
                     ),

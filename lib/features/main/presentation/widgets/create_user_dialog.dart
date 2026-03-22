@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -217,6 +216,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                       ),
                     ),
                     const SizedBox(width: 16),
+/*
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,6 +238,51 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                         ],
                       ),
                     ),
+*/
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildLabel("LOCATION"),
+                          const SizedBox(height: 8), // Label aur field ke beech thoda space
+                          BlocBuilder<LocationBloc, LocationState>(
+                            builder: (context, state) {
+                              // Check if state is loaded to show the correct items
+                              List<DropdownMenuItem<int>> dropdownItems = [];
+                              if (state is LocationLoaded) {
+                                dropdownItems = state.locations.map((l) {
+                                  return DropdownMenuItem<int>(
+                                    value: l.id,
+                                    child: Text(
+                                      l.name,
+                                      overflow: TextOverflow.ellipsis, // ✅ Mobile overflow fix
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  );
+                                }).toList();
+                              }
+
+                              return DropdownButtonFormField<int>(
+                                value: _selectedLocationId,
+                                isExpanded: true, // ✅ Important: Dropdown ko width overflow se bachata hai
+                                hint: const Text("Select Branch", style: TextStyle(fontSize: 13)),
+                                items: dropdownItems,
+                                onChanged: (v) => setState(() => _selectedLocationId = v),
+                                // Menu ki height control karein taaki mobile keyboard ke saath crash na ho
+                                menuMaxHeight: 350,
+                                decoration: _inputStyle("Select", Icons.location_on_outlined).copyWith(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                ),
+                                validator: (v) => v == null ? "Required" : null,
+                                // Dropdown icon size scaling
+                                icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    )
                   ],
                 ),
                 const SizedBox(height: 16),

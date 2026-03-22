@@ -180,6 +180,7 @@ class LabelPrintingService {
 // 4. UI LAYER
 // ==========================================================================
 
+/*
 class StockPlusTransactionView extends StatefulWidget {
   const StockPlusTransactionView({super.key});
   @override
@@ -503,6 +504,392 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
       return;
     }
 
+    if (withGst == null || withGst <= 0) {
+      _showMsg("Please enter a valid Price");
+      return;
+    }
+
+    final entity = StockTransactionEntity(
+      groupId: selectedGroup!.id!,
+      subGroupId: selectedSubGroup!.id!,
+      noOfPieces: noOfPieces,
+      pcsPerUnit: pcsPerUnit,
+      priceWithGst: withGst,
+      costPrice: double.tryParse(_costPriceCtrl.text) ?? 0.0,
+      sgstRate: selectedGroup?.sgst ?? 0.0,
+      cgstRate: selectedGroup?.cgst ?? 0.0,
+      igstRate: (selectedGroup?.sgst ?? 0.0) + (selectedGroup?.cgst ?? 0.0),
+      hsnCode: selectedGroup?.hsnCode ?? "",
+    );
+
+    context.read<StockEntryBloc>().add(SaveStockEntry(entity));
+  }
+}*/
+
+class StockPlusTransactionView extends StatefulWidget {
+  const StockPlusTransactionView({super.key});
+  @override
+  State<StockPlusTransactionView> createState() => _StockPlusTransactionViewState();
+}
+
+class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
+  final _noOfPcsCtrl = TextEditingController(text: "1");
+  final _pcsCtrl = TextEditingController(text: "1");
+  final _withGstCtrl = TextEditingController();
+  final _costPriceCtrl = TextEditingController();
+
+  ProductGroupEntity? selectedGroup;
+  ProductSubGroupEntity? selectedSubGroup;
+  List<StockTransactionEntity> recentEntries = [];
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<ProductGroupBloc>().add(LoadGroups());
+  }
+
+  void _hideLoading(BuildContext context) {
+    Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  void _calculatePrice() {
+    if (selectedGroup == null) return;
+    double withGst = double.tryParse(_withGstCtrl.text) ?? 0;
+    double tax = (selectedGroup?.sgst ?? 0) + (selectedGroup?.cgst ?? 0);
+    double cost = withGst / (1 + (tax / 100));
+    _costPriceCtrl.text = cost.toStringAsFixed(2);
+  }
+
+  void _showMsg(String msg, {bool isError = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: isError ? Colors.red.shade800 : Colors.green.shade800,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(10),
+        )
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 850;
+
+    return BlocListener<StockEntryBloc, StockEntryState>(
+      listener: (context, state) {
+        if (state is StockEntryLoading) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            useRootNavigator: true,
+            builder: (_) => const Center(child: CircularProgressIndicator()),
+          );
+        } else if (state is StockEntrySuccess) {
+          _hideLoading(context);
+          if (state.savedData.rawResponse != null) {
+            LabelPrintingService.generateAndPrintLabels(state.savedData.rawResponse!);
+          }
+          setState(() {
+            recentEntries.insert(0, state.savedData);
+            _withGstCtrl.clear();
+            _costPriceCtrl.clear();
+            _noOfPcsCtrl.text = "1";
+            _pcsCtrl.text = "1";
+            selectedGroup = null;
+            selectedSubGroup = null;
+          });
+          _showMsg("Stock Added & Labels Sent to Printer", isError: false);
+        } else if (state is StockEntryError) {
+          _hideLoading(context);
+          _showMsg(state.error);
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: const Color(0xFFF4F7FA),
+        appBar: AppBar(
+          title: const Text("STOCK PLUS ENTRY", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.history_rounded, size: 26),
+              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        endDrawer: _buildRightHistoryDrawer(isMobile, screenWidth),
+        body: Column(
+          children: [
+            _buildTopActionBar(isMobile),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
+                child: isMobile
+                    ? Column(
+                  children: [
+                    _buildFormCard(),
+                    const SizedBox(height: 16),
+                    _buildYellowTaxPanel(),
+                  ],
+                )
+                    : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: _buildFormCard()),
+                    const SizedBox(width: 20),
+                    Expanded(flex: 1, child: _buildYellowTaxPanel()),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopActionBar(bool isMobile) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _onSave,
+              icon: const Icon(Icons.print_rounded),
+              label: const Text("SAVE & PRINT LABELS", style: TextStyle(letterSpacing: 1, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildGroupDropdown(),
+          const SizedBox(height: 16),
+          _buildSubGroupDropdown(),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _tf(_noOfPcsCtrl, "NO OF PIECES", isDecimal: false)),
+              const SizedBox(width: 12),
+              Expanded(child: _tf(_pcsCtrl, "PCS / UNIT", isDecimal: false)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _tf(_withGstCtrl, "PRICE WITH GST", isDecimal: true, onChange: (_) => _calculatePrice()),
+          const SizedBox(height: 16),
+          _tf(_costPriceCtrl, "COST PRICE (AUTO)", readOnly: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroupDropdown() {
+    return BlocBuilder<ProductGroupBloc, ProductGroupState>(
+      builder: (context, state) {
+        List<ProductGroupEntity> groups = [];
+        if (state is GroupLoaded) groups = state.groups;
+
+        return DropdownButtonFormField<ProductGroupEntity>(
+          isExpanded: true,
+          value: groups.any((e) => e.id == selectedGroup?.id) ? selectedGroup : null,
+          decoration: _deco("PRODUCT GROUP"),
+          hint: const Text("Select Group"),
+          items: groups.map((g) => DropdownMenuItem(
+              value: g,
+              child: Text(g.name, overflow: TextOverflow.ellipsis)
+          )).toList(),
+          onChanged: (val) {
+            if (val != null) {
+              setState(() {
+                selectedGroup = val;
+                selectedSubGroup = null;
+                _calculatePrice();
+              });
+              context.read<ProductSubGroupBloc>().add(LoadSubGroups(groupId: val.id));
+            }
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSubGroupDropdown() {
+    return BlocBuilder<ProductSubGroupBloc, SubGroupState>(
+      builder: (context, state) {
+        List<ProductSubGroupEntity> subGroups = [];
+        if (state is SubGroupLoaded) subGroups = state.subGroups;
+
+        return DropdownButtonFormField<ProductSubGroupEntity>(
+          isExpanded: true,
+          value: subGroups.any((e) => e.id == selectedSubGroup?.id) ? selectedSubGroup : null,
+          decoration: _deco("SUB MASTER"),
+          hint: const Text("Select Sub-Group"),
+          items: subGroups.map((s) => DropdownMenuItem(
+              value: s,
+              child: Text(s.name, overflow: TextOverflow.ellipsis)
+          )).toList(),
+          onChanged: (val) => setState(() => selectedSubGroup = val),
+        );
+      },
+    );
+  }
+
+  Widget _buildYellowTaxPanel() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFEF3C7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.receipt_long_rounded, size: 18, color: Color(0xFFD97706)),
+              SizedBox(width: 8),
+              Text("GST & HSN SUMMARY", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF92400E))),
+            ],
+          ),
+          const Divider(height: 25, color: Color(0xFFFEF3C7)),
+          _taxRow("SGST RATE", "${selectedGroup?.sgst ?? 0.0}%"),
+          _taxRow("CGST RATE", "${selectedGroup?.cgst ?? 0.0}%"),
+          _taxRow("HSN CODE", selectedGroup?.hsnCode ?? "N/A"),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRightHistoryDrawer(bool isMobile, double screenWidth) {
+    return Drawer(
+      width: isMobile ? screenWidth * 0.85 : screenWidth * 0.35,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            color: const Color(0xFF0F172A),
+            child: const SafeArea(
+              bottom: false,
+              child: Row(
+                children: [
+                  Icon(Icons.history_toggle_off_rounded, color: Colors.white70),
+                  SizedBox(width: 12),
+                  Text("RECENT ADDITIONS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: recentEntries.isEmpty
+                ? const Center(child: Text("History is empty", style: TextStyle(color: Colors.grey)))
+                : ListView.separated(
+              itemCount: recentEntries.length,
+              padding: EdgeInsets.zero,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (ctx, index) {
+                final item = recentEntries[index];
+                return ListTile(
+                  leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFF1F5F9),
+                      child: Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF0F172A))
+                  ),
+                  title: Text(item.hsnCode, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  subtitle: Text("Qty: ${item.noOfPieces} | ₹${item.priceWithGst}", style: const TextStyle(fontSize: 12)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.print_outlined, color: Colors.blueAccent),
+                    onPressed: () => LabelPrintingService.generateAndPrintLabels(item.rawResponse!),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _deco(String l) => InputDecoration(
+    labelText: l,
+    labelStyle: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+    filled: true,
+    fillColor: const Color(0xFFF8FAFC),
+  );
+
+  Widget _tf(TextEditingController c, String l, {bool readOnly = false, bool isDecimal = true, Function(String)? onChange}) {
+    return TextField(
+      controller: c,
+      readOnly: readOnly,
+      onChanged: onChange,
+      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+      decoration: _deco(l),
+      keyboardType: TextInputType.numberWithOptions(decimal: isDecimal),
+      inputFormatters: [
+        if (isDecimal)
+          FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
+        else
+          FilteringTextInputFormatter.digitsOnly
+      ],
+    );
+  }
+
+  Widget _taxRow(String l, String v) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(l, style: const TextStyle(color: Colors.blueGrey, fontSize: 12)),
+            Text(v, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)))
+          ]
+      )
+  );
+
+  void _onSave() {
+    if (selectedGroup == null || selectedSubGroup == null) {
+      _showMsg("Please select both Product Group and Sub-Group");
+      return;
+    }
+    final int? noOfPieces = int.tryParse(_noOfPcsCtrl.text);
+    final int? pcsPerUnit = int.tryParse(_pcsCtrl.text);
+    final double? withGst = double.tryParse(_withGstCtrl.text);
+
+    if (noOfPieces == null || noOfPieces <= 0) {
+      _showMsg("Please enter a valid Quantity");
+      return;
+    }
+    if (pcsPerUnit == null || pcsPerUnit < 1) {
+      _showMsg("Pieces per unit must be at least 1");
+      return;
+    }
     if (withGst == null || withGst <= 0) {
       _showMsg("Please enter a valid Price");
       return;
