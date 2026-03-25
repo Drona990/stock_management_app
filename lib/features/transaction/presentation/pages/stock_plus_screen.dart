@@ -21,6 +21,7 @@ class StockTransactionEntity {
   final String hsnCode;
   final List<dynamic>? barcodes;
   final Map<String, dynamic>? rawResponse;
+  final String? createdAt;
 
   StockTransactionEntity({
     this.id,
@@ -36,6 +37,7 @@ class StockTransactionEntity {
     required this.hsnCode,
     this.barcodes,
     this.rawResponse,
+    this.createdAt,
   });
 
   Map<String, dynamic> toJson() => {
@@ -65,12 +67,13 @@ class StockTransactionEntity {
       igstRate: double.tryParse(json['igst_rate'].toString()) ?? 0.0,
       hsnCode: json['hsn_code']?.toString() ?? "",
       barcodes: json['barcode_list'],
+      createdAt: json['formatted_date'] ?? json['created_at']?.toString() ?? "",
       rawResponse: json,
     );
   }
 }
 
-class StockTransactionRepository {
+class StockTransactionRepository1 {
   final ApiClient apiClient = sl<ApiClient>();
 
   Future<StockTransactionEntity> saveStockEntry(StockTransactionEntity entity) async {
@@ -84,6 +87,51 @@ class StockTransactionRepository {
       return StockTransactionEntity.fromJson(data);
     }
     throw Exception("Invalid Server Response");
+  }
+}
+
+
+
+class StockTransactionRepository {
+  final ApiClient apiClient = sl<ApiClient>();
+
+  // PERSISTENCE: Data fetch karne ke liye
+  Future<List<StockTransactionEntity>> fetchHistory() async {
+    final response = await apiClient.get('/api/inventory/stock-transactions/');
+    if (response.statusCode == 200) {
+      final List data = response.data;
+      return data.map((e) => StockTransactionEntity.fromJson(e)).toList();
+    }
+    throw Exception("History load fail hui");
+  }
+
+  // SAVE / UPDATE
+  Future<StockTransactionEntity> saveStockEntry(StockTransactionEntity entity) async {
+    final bool isUpdate = entity.id != null;
+    final String path = isUpdate
+        ? '/api/inventory/stock-transactions/${entity.id}/'
+        : '/api/inventory/stock-transactions/';
+
+    final response = isUpdate
+        ? await apiClient.put(path, data: entity.toJson())
+        : await apiClient.post(path, data: entity.toJson());
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      final data = response.data is Map && response.data.containsKey('data')
+          ? response.data['data']
+          : response.data;
+      return StockTransactionEntity.fromJson(data);
+    }
+    throw Exception("Invalid Server Response");
+  }
+
+  // DELETE
+  Future<void> deleteStock(int id) async {
+    final response = await apiClient.delete('/api/inventory/stock-transactions/$id/');
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      final errorMsg = response.data['error'] ?? "Delete failed";
+      throw Exception(errorMsg);
+    }
   }
 }
 
@@ -186,6 +234,7 @@ class StockPlusTransactionView extends StatefulWidget {
   State<StockPlusTransactionView> createState() => _StockPlusTransactionViewState();
 }
 
+/*
 class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
   final _noOfPcsCtrl = TextEditingController(text: "1");
   final _pcsCtrl = TextEditingController(text: "1");
@@ -197,6 +246,9 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
   List<StockTransactionEntity> recentEntries = [];
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // Track if we are editing an entry
+  StockTransactionEntity? editingEntity;
+
   @override
   void initState() {
     super.initState();
@@ -205,6 +257,30 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
 
   void _hideLoading(BuildContext context) {
     Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  void _resetForm() {
+    setState(() {
+      editingEntity = null;
+      _withGstCtrl.clear();
+      _costPriceCtrl.clear();
+      _noOfPcsCtrl.text = "1";
+      _pcsCtrl.text = "1";
+      selectedGroup = null;
+      selectedSubGroup = null;
+    });
+  }
+
+  void _onEdit(StockTransactionEntity item) {
+    setState(() {
+      editingEntity = item;
+      _noOfPcsCtrl.text = item.noOfPieces.toString();
+      _pcsCtrl.text = item.pcsPerUnit.toString();
+      _withGstCtrl.text = item.priceWithGst.toString();
+      _costPriceCtrl.text = item.costPrice.toString();
+      // Dropdown selection match logic logic yahan aayega if needed
+    });
+    _scaffoldKey.currentState?.closeEndDrawer();
   }
 
   void _calculatePrice() {
@@ -234,27 +310,20 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
     return BlocListener<StockEntryBloc, StockEntryState>(
       listener: (context, state) {
         if (state is StockEntryLoading) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            useRootNavigator: true,
-            builder: (_) => const Center(child: CircularProgressIndicator()),
-          );
+          showDialog(context: context, barrierDismissible: false, useRootNavigator: true, builder: (_) => const Center(child: CircularProgressIndicator()));
         } else if (state is StockEntrySuccess) {
           _hideLoading(context);
           if (state.savedData.rawResponse != null) {
             LabelPrintingService.generateAndPrintLabels(state.savedData.rawResponse!);
           }
           setState(() {
+            if (editingEntity != null) {
+              recentEntries.removeWhere((e) => e.id == editingEntity!.id);
+            }
             recentEntries.insert(0, state.savedData);
-            _withGstCtrl.clear();
-            _costPriceCtrl.clear();
-            _noOfPcsCtrl.text = "1";
-            _pcsCtrl.text = "1";
-            selectedGroup = null;
-            selectedSubGroup = null;
           });
-          _showMsg("Stock Added & Labels Sent to Printer", isError: false);
+          _resetForm();
+          _showMsg(editingEntity == null ? "Stock Added & Printed" : "Stock Updated & Reprinted", isError: false);
         } else if (state is StockEntryError) {
           _hideLoading(context);
           _showMsg(state.error);
@@ -264,12 +333,10 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
         key: _scaffoldKey,
         backgroundColor: const Color(0xFFF4F7FA),
         appBar: AppBar(
-          title: const Text("STOCK PLUS ENTRY", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          title: Text(editingEntity == null ? "STOCK PLUS ENTRY" : "EDIT STOCK ENTRY"),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.history_rounded, size: 26),
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-            ),
+            if (editingEntity != null) IconButton(icon: const Icon(Icons.cancel), onPressed: _resetForm),
+            IconButton(icon: const Icon(Icons.history_rounded, size: 26), onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
             const SizedBox(width: 8),
           ],
         ),
@@ -281,21 +348,12 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
               child: SingleChildScrollView(
                 padding: EdgeInsets.all(isMobile ? 16 : 24),
                 child: isMobile
-                    ? Column(
-                  children: [
-                    _buildFormCard(),
-                    const SizedBox(height: 16),
-                    _buildYellowTaxPanel(),
-                  ],
-                )
-                    : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 2, child: _buildFormCard()),
-                    const SizedBox(width: 20),
-                    Expanded(flex: 1, child: _buildYellowTaxPanel()),
-                  ],
-                ),
+                    ? Column(children: [_buildFormCard(), const SizedBox(height: 16), _buildYellowTaxPanel()])
+                    : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(flex: 2, child: _buildFormCard()),
+                  const SizedBox(width: 20),
+                  Expanded(flex: 1, child: _buildYellowTaxPanel()),
+                ]),
               ),
             ),
           ],
@@ -308,27 +366,17 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _onSave,
-              icon: const Icon(Icons.print_rounded),
-              label: const Text("SAVE & PRINT LABELS", style: TextStyle(letterSpacing: 1, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F172A),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                elevation: 0,
-              ),
-            ),
-          ),
-        ],
+      decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
+      child: ElevatedButton.icon(
+        onPressed: _onSave,
+        icon: Icon(editingEntity == null ? Icons.print_rounded : Icons.save_as_rounded),
+        label: Text(editingEntity == null ? "SAVE & PRINT LABELS" : "UPDATE & REPRINT"),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: editingEntity == null ? const Color(0xFF0F172A) : Colors.indigo.shade900,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
       ),
     );
   }
@@ -336,11 +384,7 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
   Widget _buildFormCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4))],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12)]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -348,13 +392,11 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
           const SizedBox(height: 16),
           _buildSubGroupDropdown(),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: _tf(_noOfPcsCtrl, "NO OF PIECES", isDecimal: false)),
-              const SizedBox(width: 12),
-              Expanded(child: _tf(_pcsCtrl, "PCS / UNIT", isDecimal: false)),
-            ],
-          ),
+          Row(children: [
+            Expanded(child: _tf(_noOfPcsCtrl, "NO OF PIECES", isDecimal: false)),
+            const SizedBox(width: 12),
+            Expanded(child: _tf(_pcsCtrl, "PCS / UNIT", isDecimal: false)),
+          ]),
           const SizedBox(height: 16),
           _tf(_withGstCtrl, "PRICE WITH GST", isDecimal: true, onChange: (_) => _calculatePrice()),
           const SizedBox(height: 16),
@@ -369,25 +411,14 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
       builder: (context, state) {
         List<ProductGroupEntity> groups = [];
         if (state is GroupLoaded) groups = state.groups;
-
         return DropdownButtonFormField<ProductGroupEntity>(
           isExpanded: true,
           value: groups.any((e) => e.id == selectedGroup?.id) ? selectedGroup : null,
           decoration: _deco("PRODUCT GROUP"),
-          hint: const Text("Select Group"),
-          items: groups.map((g) => DropdownMenuItem(
-              value: g,
-              child: Text(g.name, overflow: TextOverflow.ellipsis)
-          )).toList(),
+          items: groups.map((g) => DropdownMenuItem(value: g, child: Text(g.name))).toList(),
           onChanged: (val) {
-            if (val != null) {
-              setState(() {
-                selectedGroup = val;
-                selectedSubGroup = null;
-                _calculatePrice();
-              });
-              context.read<ProductSubGroupBloc>().add(LoadSubGroups(groupId: val.id));
-            }
+            setState(() { selectedGroup = val; selectedSubGroup = null; _calculatePrice(); });
+            context.read<ProductSubGroupBloc>().add(LoadSubGroups(groupId: val!.id));
           },
         );
       },
@@ -399,16 +430,11 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
       builder: (context, state) {
         List<ProductSubGroupEntity> subGroups = [];
         if (state is SubGroupLoaded) subGroups = state.subGroups;
-
         return DropdownButtonFormField<ProductSubGroupEntity>(
           isExpanded: true,
           value: subGroups.any((e) => e.id == selectedSubGroup?.id) ? selectedSubGroup : null,
           decoration: _deco("SUB MASTER"),
-          hint: const Text("Select Sub-Group"),
-          items: subGroups.map((s) => DropdownMenuItem(
-              value: s,
-              child: Text(s.name, overflow: TextOverflow.ellipsis)
-          )).toList(),
+          items: subGroups.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
           onChanged: (val) => setState(() => selectedSubGroup = val),
         );
       },
@@ -418,150 +444,465 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
   Widget _buildYellowTaxPanel() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFEF3C7)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.receipt_long_rounded, size: 18, color: Color(0xFFD97706)),
-              SizedBox(width: 8),
-              Text("GST & HSN SUMMARY", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF92400E))),
-            ],
-          ),
-          const Divider(height: 25, color: Color(0xFFFEF3C7)),
-          _taxRow("SGST RATE", "${selectedGroup?.sgst ?? 0.0}%"),
-          _taxRow("CGST RATE", "${selectedGroup?.cgst ?? 0.0}%"),
-          _taxRow("HSN CODE", selectedGroup?.hsnCode ?? "N/A"),
-        ],
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFFEF3C7))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _taxRow("SGST RATE", "${selectedGroup?.sgst ?? 0.0}%"),
+        _taxRow("CGST RATE", "${selectedGroup?.cgst ?? 0.0}%"),
+        _taxRow("HSN CODE", selectedGroup?.hsnCode ?? "N/A"),
+      ]),
     );
   }
 
   Widget _buildRightHistoryDrawer(bool isMobile, double screenWidth) {
     return Drawer(
       width: isMobile ? screenWidth * 0.85 : screenWidth * 0.35,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-            color: const Color(0xFF0F172A),
-            child: const SafeArea(
-              bottom: false,
-              child: Row(
-                children: [
-                  Icon(Icons.history_toggle_off_rounded, color: Colors.white70),
-                  SizedBox(width: 12),
-                  Text("RECENT ADDITIONS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                ],
-              ),
-            ),
+      child: Column(children: [
+        Container(padding: const EdgeInsets.all(20), color: const Color(0xFF0F172A), child: const SafeArea(child: Center(child: Text("RECENT ADDITIONS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))))),
+        Expanded(
+          child: recentEntries.isEmpty
+              ? const Center(child: Text("History is empty"))
+              : ListView.separated(
+            itemCount: recentEntries.length,
+            separatorBuilder: (_, __) => const Divider(),
+            itemBuilder: (ctx, index) {
+              final item = recentEntries[index];
+              return ListTile(
+                title: Text(item.hsnCode, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text("Qty: ${item.noOfPieces} | ₹${item.priceWithGst}"),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _onEdit(item)),
+                  IconButton(icon: const Icon(Icons.print), onPressed: () => LabelPrintingService.generateAndPrintLabels(item.rawResponse!)),
+                ]),
+              );
+            },
           ),
-          Expanded(
-            child: recentEntries.isEmpty
-                ? const Center(child: Text("History is empty", style: TextStyle(color: Colors.grey)))
-                : ListView.separated(
-              itemCount: recentEntries.length,
-              padding: EdgeInsets.zero,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (ctx, index) {
-                final item = recentEntries[index];
-                return ListTile(
-                  leading: const CircleAvatar(
-                      backgroundColor: Color(0xFFF1F5F9),
-                      child: Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF0F172A))
-                  ),
-                  title: Text(item.hsnCode, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  subtitle: Text("Qty: ${item.noOfPieces} | ₹${item.priceWithGst}", style: const TextStyle(fontSize: 12)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.print_outlined, color: Colors.blueAccent),
-                    onPressed: () => LabelPrintingService.generateAndPrintLabels(item.rawResponse!),
-                  ),
-                );
-              },
-            ),
+        ),
+      ]),
+    );
+  }
+
+  void _onSave() {
+    if (selectedGroup == null || selectedSubGroup == null) { _showMsg("Select Group & Sub-Group"); return; }
+    final entity = StockTransactionEntity(
+      id: editingEntity?.id, // Important: Null for new, ID for update
+      groupId: selectedGroup!.id!,
+      subGroupId: selectedSubGroup!.id!,
+      noOfPieces: int.parse(_noOfPcsCtrl.text),
+      pcsPerUnit: int.parse(_pcsCtrl.text),
+      priceWithGst: double.parse(_withGstCtrl.text),
+      costPrice: double.parse(_costPriceCtrl.text),
+      sgstRate: selectedGroup?.sgst ?? 0.0,
+      cgstRate: selectedGroup?.cgst ?? 0.0,
+      igstRate: (selectedGroup?.sgst ?? 0.0) + (selectedGroup?.cgst ?? 0.0),
+      hsnCode: selectedGroup?.hsnCode ?? "",
+    );
+    context.read<StockEntryBloc>().add(SaveStockEntry(entity));
+  }
+
+  InputDecoration _deco(String l) => InputDecoration(labelText: l, filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)));
+  Widget _tf(TextEditingController c, String l, {bool readOnly = false, bool isDecimal = true, Function(String)? onChange}) => TextField(controller: c, readOnly: readOnly, onChanged: onChange, decoration: _deco(l), keyboardType: TextInputType.number);
+  Widget _taxRow(String l, String v) => Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l), Text(v, style: const TextStyle(fontWeight: FontWeight.bold))]));
+}*/
+
+
+class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
+  final _noOfPcsCtrl = TextEditingController(text: "1");
+  final _pcsCtrl = TextEditingController(text: "1");
+  final _withGstCtrl = TextEditingController();
+  final _costPriceCtrl = TextEditingController();
+
+  ProductGroupEntity? selectedGroup;
+  ProductSubGroupEntity? selectedSubGroup;
+  List<StockTransactionEntity> recentEntries = [];
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  StockTransactionEntity? editingEntity;
+  bool isHistoryLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<ProductGroupBloc>().add(LoadGroups());
+    _loadHistory(); // 🔄 Persistence: Load from server on startup
+  }
+
+  // LOGIC: Data persistence fetch
+  Future<void> _loadHistory() async {
+    setState(() => isHistoryLoading = true);
+    try {
+      final response = await sl<ApiClient>().get('/api/inventory/stock-transactions/');
+      final List data = response.data;
+      setState(() {
+        recentEntries = data.map((e) => StockTransactionEntity.fromJson(e)).toList();
+        isHistoryLoading = false;
+      });
+    } catch (e) {
+      setState(() => isHistoryLoading = false);
+    }
+  }
+
+  // LOGIC: Editing selection
+  void _onEdit(StockTransactionEntity item) {
+    // 1. Match Product Group from Bloc State
+    final groupState = context.read<ProductGroupBloc>().state;
+    ProductGroupEntity? matchedGroup;
+    if (groupState is GroupLoaded) {
+      matchedGroup = groupState.groups.firstWhere((g) => g.id == item.groupId, orElse: () => groupState.groups.first);
+    }
+
+    setState(() {
+      editingEntity = item;
+      selectedGroup = matchedGroup;
+      _noOfPcsCtrl.text = item.noOfPieces.toString();
+      _pcsCtrl.text = item.pcsPerUnit.toString();
+      _withGstCtrl.text = item.priceWithGst.toString();
+      _costPriceCtrl.text = item.costPrice.toString();
+
+      // 2. Load Subgroups for the selected group
+      if (matchedGroup != null) {
+        context.read<ProductSubGroupBloc>().add(LoadSubGroups(groupId: matchedGroup.id));
+      }
+    });
+
+    _calculatePrice(); // Auto calculate tax panel
+    _scaffoldKey.currentState?.closeEndDrawer();
+  }
+
+  // LOGIC: Safe Delete
+  void _confirmDelete(int id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirm Delete"),
+        content: const Text("Are you sure to delete this stock ?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                final res = await sl<ApiClient>().delete('/api/inventory/stock-transactions/$id/');
+                if (res.statusCode == 200 || res.statusCode == 204) {
+                  _showMsg("Deleted Successfully", isError: false);
+                  _loadHistory(); // Refresh persistent list
+                }
+              } catch (e) {
+                _showMsg("Delete Failed: Items might be used.");
+              }
+            },
+            child: const Text("DELETE", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
   }
 
-  InputDecoration _deco(String l) => InputDecoration(
-    labelText: l,
-    labelStyle: const TextStyle(fontSize: 12, color: Colors.blueGrey),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-    filled: true,
-    fillColor: const Color(0xFFF8FAFC),
-  );
+  void _resetForm() {
+    setState(() {
+      editingEntity = null;
+      _withGstCtrl.clear();
+      _costPriceCtrl.clear();
+      _noOfPcsCtrl.text = "1";
+      _pcsCtrl.text = "1";
+      selectedGroup = null;
+      selectedSubGroup = null;
+    });
+  }
 
-  Widget _tf(TextEditingController c, String l, {bool readOnly = false, bool isDecimal = true, Function(String)? onChange}) {
-    return TextField(
-      controller: c,
-      readOnly: readOnly,
-      onChanged: onChange,
-      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-      decoration: _deco(l),
-      keyboardType: TextInputType.numberWithOptions(decimal: isDecimal),
-      inputFormatters: [
-        if (isDecimal)
-          FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
-        else
-          FilteringTextInputFormatter.digitsOnly
-      ],
+  void _calculatePrice() {
+    if (selectedGroup == null) return;
+    double withGst = double.tryParse(_withGstCtrl.text) ?? 0;
+    double tax = (selectedGroup?.sgst ?? 0) + (selectedGroup?.cgst ?? 0);
+    double cost = withGst / (1 + (tax / 100));
+    _costPriceCtrl.text = cost.toStringAsFixed(2);
+  }
+
+  void _showMsg(String msg, {bool isError = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: isError ? Colors.red.shade800 : Colors.green.shade800,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(10),
+        )
     );
   }
 
-  Widget _taxRow(String l, String v) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  @override
+  Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 850;
+
+    return BlocListener<StockEntryBloc, StockEntryState>(
+      listener: (context, state) {
+        if (state is StockEntryLoading) {
+          showDialog(context: context, barrierDismissible: false, useRootNavigator: true, builder: (_) => const Center(child: CircularProgressIndicator()));
+        } else if (state is StockEntrySuccess) {
+          Navigator.of(context, rootNavigator: true).pop();
+          _loadHistory(); // Persistence refresh
+          _resetForm();
+          _showMsg(editingEntity == null ? "Stock Added & Printed" : "Stock Updated & Reprinted", isError: false);
+        } else if (state is StockEntryError) {
+          Navigator.of(context, rootNavigator: true).pop();
+          _showMsg(state.error);
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: const Color(0xFFF4F7FA),
+        appBar: AppBar(
+          title: Text(editingEntity == null ? "STOCK PLUS ENTRY" : "EDIT STOCK ENTRY"),
+          actions: [
+            if (editingEntity != null) IconButton(icon: const Icon(Icons.cancel), onPressed: _resetForm),
+            IconButton(icon: const Icon(Icons.history_rounded), onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
+          ],
+        ),
+        endDrawer: _buildRightHistoryDrawer(isMobile, screenWidth),
+        body: Column(
           children: [
-            Text(l, style: const TextStyle(color: Colors.blueGrey, fontSize: 12)),
-            Text(v, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)))
-          ]
-      )
-  );
+            _buildTopActionBar(isMobile),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
+                child: isMobile
+                    ? Column(children: [_buildFormCard(), const SizedBox(height: 16), _buildYellowTaxPanel()])
+                    : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(flex: 2, child: _buildFormCard()),
+                  const SizedBox(width: 20),
+                  Expanded(flex: 1, child: _buildYellowTaxPanel()),
+                ]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- AAPKE ORIGINAL UI WIDGETS ---
+
+  Widget _buildTopActionBar(bool isMobile) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
+      decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
+      child: ElevatedButton.icon(
+        onPressed: _onSave,
+        icon: Icon(editingEntity == null ? Icons.print_rounded : Icons.save_as_rounded),
+        label: Text(editingEntity == null ? "SAVE & PRINT LABELS" : "UPDATE & REPRINT"),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: editingEntity == null ? const Color(0xFF0F172A) : Colors.indigo.shade900,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12)]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildGroupDropdown(),
+          const SizedBox(height: 16),
+          _buildSubGroupDropdown(),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: _tf(_noOfPcsCtrl, "NO OF PIECES", isDecimal: false)),
+            const SizedBox(width: 12),
+            Expanded(child: _tf(_pcsCtrl, "PCS / UNIT", isDecimal: false)),
+          ]),
+          const SizedBox(height: 16),
+          _tf(_withGstCtrl, "PRICE WITH GST", isDecimal: true, onChange: (_) => _calculatePrice()),
+          const SizedBox(height: 16),
+          _tf(_costPriceCtrl, "COST PRICE (AUTO)", readOnly: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroupDropdown() {
+    return BlocBuilder<ProductGroupBloc, ProductGroupState>(
+      builder: (context, state) {
+        List<ProductGroupEntity> groups = (state is GroupLoaded) ? state.groups : [];
+        return DropdownButtonFormField<ProductGroupEntity>(
+          isExpanded: true,
+          value: groups.any((e) => e.id == selectedGroup?.id) ? groups.firstWhere((e) => e.id == selectedGroup?.id) : null,
+          decoration: _deco("PRODUCT GROUP"),
+          items: groups.map((g) => DropdownMenuItem(value: g, child: Text(g.name))).toList(),
+          onChanged: (val) {
+            setState(() { selectedGroup = val; selectedSubGroup = null; _calculatePrice(); });
+            context.read<ProductSubGroupBloc>().add(LoadSubGroups(groupId: val!.id));
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSubGroupDropdown() {
+    return BlocBuilder<ProductSubGroupBloc, SubGroupState>(
+      builder: (context, state) {
+        List<ProductSubGroupEntity> subGroups = (state is SubGroupLoaded) ? state.subGroups : [];
+
+        // Auto-select subgroup if editing
+        if (editingEntity != null && selectedSubGroup == null && subGroups.isNotEmpty) {
+          try {
+            selectedSubGroup = subGroups.firstWhere((s) => s.id == editingEntity!.subGroupId);
+          } catch(e) {}
+        }
+
+        return DropdownButtonFormField<ProductSubGroupEntity>(
+          isExpanded: true,
+          value: subGroups.any((e) => e.id == selectedSubGroup?.id) ? subGroups.firstWhere((e) => e.id == selectedSubGroup?.id) : null,
+          decoration: _deco("SUB MASTER"),
+          items: subGroups.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
+          onChanged: (val) => setState(() => selectedSubGroup = val),
+        );
+      },
+    );
+  }
+
+  Widget _buildYellowTaxPanel() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFFEF3C7))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _taxRow("SGST RATE", "${selectedGroup?.sgst ?? 0.0}%"),
+        _taxRow("CGST RATE", "${selectedGroup?.cgst ?? 0.0}%"),
+        _taxRow("HSN CODE", selectedGroup?.hsnCode ?? "N/A"),
+      ]),
+    );
+  }
+
+  Widget _buildRightHistoryDrawer(bool isMobile, double screenWidth) {
+    return Drawer(
+      width: isMobile ? screenWidth * 0.85 : 400,
+      child: Column(children: [
+        Container(padding: const EdgeInsets.all(20), color: const Color(0xFF0F172A), child: const SafeArea(child: Center(child: Text("HISTORY", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))))),
+        Expanded(
+          child: isHistoryLoading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.separated(
+            itemCount: recentEntries.length,
+            separatorBuilder: (_, __) => const Divider(),
+            itemBuilder: (ctx, index) {
+              final item = recentEntries[index];
+              return ListTile(
+                title: Text(item.hsnCode, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text("Qty: ${item.noOfPieces} | ₹${item.priceWithGst}\n${item.createdAt??""}"),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _onEdit(item)),
+                  IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _confirmDelete(item.id!)),
+                  IconButton(icon: const Icon(Icons.print), onPressed: () => LabelPrintingService.generateAndPrintLabels(item.rawResponse!)),
+                ]),
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
+
 
   void _onSave() {
+    // 1. Basic Validation
     if (selectedGroup == null || selectedSubGroup == null) {
-      _showMsg("Please select both Product Group and Sub-Group");
+      _showMsg("Select Group & Sub-Group");
       return;
     }
-    final int? noOfPieces = int.tryParse(_noOfPcsCtrl.text);
-    final int? pcsPerUnit = int.tryParse(_pcsCtrl.text);
-    final double? withGst = double.tryParse(_withGstCtrl.text);
-
-    if (noOfPieces == null || noOfPieces <= 0) {
-      _showMsg("Please enter a valid Quantity");
-      return;
-    }
-    if (pcsPerUnit == null || pcsPerUnit < 1) {
-      _showMsg("Pieces per unit must be at least 1");
-      return;
-    }
-    if (withGst == null || withGst <= 0) {
-      _showMsg("Please enter a valid Price");
+    if (_noOfPcsCtrl.text.isEmpty || _withGstCtrl.text.isEmpty) {
+      _showMsg("Please fill all fields");
       return;
     }
 
+    // 2. Warning Modal / Confirmation Dialog
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 10),
+            Text("Confirm Stock Entry", style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Are you sure to add stock and print ?"),
+            const SizedBox(height: 16),
+            _summaryRow("Group:", selectedGroup?.name ?? ""),
+            _summaryRow("Sub-Master:", selectedSubGroup?.name ?? ""),
+            _summaryRow("Total Pieces:", _noOfPcsCtrl.text),
+            _summaryRow("Price/Unit:", "₹${_withGstCtrl.text}"),
+            const Divider(height: 24),
+            const Text(
+              "Note: After saving stock barcode will autogenerate.",
+              style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _processSave();
+            },
+            child: const Text("YES, SAVE & PRINT"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Final Processing Logic (Aapka original code)
+  void _processSave() {
     final entity = StockTransactionEntity(
+      id: editingEntity?.id,
       groupId: selectedGroup!.id!,
       subGroupId: selectedSubGroup!.id!,
-      noOfPieces: noOfPieces,
-      pcsPerUnit: pcsPerUnit,
-      priceWithGst: withGst,
-      costPrice: double.tryParse(_costPriceCtrl.text) ?? 0.0,
+      noOfPieces: int.parse(_noOfPcsCtrl.text),
+      pcsPerUnit: int.parse(_pcsCtrl.text),
+      priceWithGst: double.parse(_withGstCtrl.text),
+      costPrice: double.parse(_costPriceCtrl.text),
       sgstRate: selectedGroup?.sgst ?? 0.0,
       cgstRate: selectedGroup?.cgst ?? 0.0,
       igstRate: (selectedGroup?.sgst ?? 0.0) + (selectedGroup?.cgst ?? 0.0),
       hsnCode: selectedGroup?.hsnCode ?? "",
     );
-
     context.read<StockEntryBloc>().add(SaveStockEntry(entity));
   }
+
+  // Summary Row Helper
+  Widget _summaryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _deco(String l) => InputDecoration(labelText: l, filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)));
+  Widget _tf(TextEditingController c, String l, {bool readOnly = false, bool isDecimal = true, Function(String)? onChange}) => TextField(controller: c, readOnly: readOnly, onChanged: onChange, decoration: _deco(l), keyboardType: TextInputType.number);
+  Widget _taxRow(String l, String v) => Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l), Text(v, style: const TextStyle(fontWeight: FontWeight.bold))]));
 }

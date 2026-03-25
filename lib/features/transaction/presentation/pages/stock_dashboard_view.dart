@@ -2,6 +2,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../injection.dart';
+import '../../../main/presentation/pages/bar&resturant/master_report_view.dart';
 import '../widgets/performance_modal.dart';
 import '../widgets/report_modal.dart';
 import 'package:flutter/material.dart';
@@ -35,6 +36,7 @@ class DashboardRepository {
   final ApiClient _api = sl<ApiClient>();
   Future<DashboardModel> getSummary() async {
     final res = await _api.get('/api/inventory/dashboard/');
+    print("dashboard data is: $res");
     return DashboardModel.fromJson(res.data);
   }
 
@@ -101,6 +103,11 @@ class _StockDashboardViewState extends State<StockDashboardView> {
           title: const Text("ERP ANALYTICS", style: TextStyle(color: Colors.white, fontSize: 14)),
           // For mobile, we might want to wrap actions or use a popup menu if too many
           actions: [
+            _actionBtn(
+              "Master Report",
+              Colors.blueAccent,
+                  () => _showMasterReportDialog(),
+            ),
             _actionBtn(isMobile ? "PERF" : "PERFORMANCE", Colors.purple, () => PerformanceModal.show(context, DateTime.now().month, _months, _locations)),
             _actionBtn("STOCK", Colors.blue, () => _showFilterDialog('stock')),
             _actionBtn("SALES", Colors.green, () => _showFilterDialog('sales')),
@@ -322,4 +329,15 @@ class _StockDashboardViewState extends State<StockDashboardView> {
     fillColor: const Color(0xFFF8FAFC),
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
   );
+
+  void _showMasterReportDialog() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const MasterReportScreen(),
+      ),
+    );
+  }
+
+
 }
