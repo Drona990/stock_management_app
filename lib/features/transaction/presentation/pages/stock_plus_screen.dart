@@ -1,11 +1,10 @@
-
-import 'dart:developer';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:stock_management/features/inventory/presentation/bloc/item_location_bloc.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../injection.dart';
 import '../../../inventory/presentation/bloc/inventory_group_subgroup_bloc.dart';
@@ -16,17 +15,19 @@ import '../../../inventory/presentation/bloc/inventory_group_subgroup_bloc.dart'
 
 class StockTransactionEntity {
   final int? id;
-  final int groupId, subGroupId, noOfPieces, pcsPerUnit;
+  final int groupId, subGroupId,locationId, noOfPieces, pcsPerUnit;
   final double priceWithGst, costPrice, sgstRate, cgstRate, igstRate;
   final String hsnCode;
   final List<dynamic>? barcodes;
   final Map<String, dynamic>? rawResponse;
   final String? createdAt;
+  final String? itemLocationName;
 
   StockTransactionEntity({
     this.id,
     required this.groupId,
     required this.subGroupId,
+    required this.locationId,
     required this.noOfPieces,
     required this.pcsPerUnit,
     required this.priceWithGst,
@@ -38,11 +39,13 @@ class StockTransactionEntity {
     this.barcodes,
     this.rawResponse,
     this.createdAt,
+    this.itemLocationName,
   });
 
   Map<String, dynamic> toJson() => {
     "group": groupId,
     "sub_group": subGroupId,
+    "item_location": locationId,
     "no_of_pieces": noOfPieces,
     "pcs_per_unit": pcsPerUnit,
     "price_with_gst": priceWithGst,
@@ -58,6 +61,10 @@ class StockTransactionEntity {
       id: json['id'],
       groupId: json['group'] ?? 0,
       subGroupId: json['sub_group'] ?? 0,
+      locationId: json['item_location'] is Map
+          ? (json['item_location']['id'] ?? 0)
+          : (json['item_location'] ?? 0),
+      itemLocationName: json['item_location_name'] ?? "No Rack",
       noOfPieces: json['no_of_pieces'] ?? 0,
       pcsPerUnit: json['pcs_per_unit'] ?? 1,
       priceWithGst: double.tryParse(json['price_with_gst'].toString()) ?? 0.0,
@@ -177,7 +184,7 @@ class StockEntryBloc extends Bloc<StockEntryEvent, StockEntryState> {
 // 3. PRINT SERVICE
 // ==========================================================================
 
-class LabelPrintingService {
+class LabelPrintingService1 {
   static Future<void> generateAndPrintLabels(Map<String, dynamic> data) async {
     final pdf = pw.Document();
     final List barcodes = data['barcode_list'] ?? [];
@@ -224,6 +231,93 @@ class LabelPrintingService {
   }
 }
 
+class LabelPrintingService {
+  static Future<void> generateAndPrintLabels(Map<String, dynamic> data) async {
+    final pdf = pw.Document();
+
+    final List barcodes = data['barcode_list'] ?? [];
+    final String subGroupName = (data['sub_group_name'] ?? "ITEM").toString().toUpperCase();
+    final String price = data['price_with_gst']?.toString() ?? "0.00";
+    final shop = data['shop_details'] ?? {};
+
+
+    if (barcodes.isEmpty) return;
+
+    for (var code in barcodes) {
+      pdf.addPage(
+        pw.Page(
+          pageFormat: const PdfPageFormat(
+            30 * PdfPageFormat.mm,
+            50 * PdfPageFormat.mm,
+            marginAll: 1.2 * PdfPageFormat.mm,
+          ),
+          build: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Text(shop['name']?.toUpperCase(),
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+              pw.Divider(thickness: 0.5),
+
+              pw.Text("DISCOUNT PRICE",
+                  style: pw.TextStyle(fontSize: 4.5, fontWeight: pw.FontWeight.bold)),
+              pw.Text("$price /-",
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 15)),
+
+              pw.Divider(thickness: 0.5),
+              pw.Text(subGroupName,
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+
+              pw.Spacer(),
+
+              pw.Center(
+                child: pw.BarcodeWidget(
+                  barcode: pw.Barcode.code128(),
+                  data: code.toString(),
+                  height: 25,
+                  width: 26 * PdfPageFormat.mm,
+                  drawText: true,
+                  textStyle: pw.TextStyle(fontSize: 5),
+                ),
+              ),
+
+              pw.SizedBox(height: 1),
+              pw.Text("NO EXCHANGE / NO RETURN",
+                  style: pw.TextStyle(fontSize: 4.5, fontWeight: pw.FontWeight.bold)),
+              pw.Divider(thickness: 0.3, height: 3),
+
+              pw.Text(
+                "Packed by: ${shop['address']}",
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(fontSize: 4, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.Text("Care: ${shop['mobile']}",
+                  style: pw.TextStyle(fontSize: 3.5, fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      if (kIsWeb) {
+        await Printing.layoutPdf(
+          onLayout: (PdfPageFormat format) async => pdf.save(),
+          name: 'Labels_${subGroupName}_${DateTime.now().millisecond}',
+        );
+      } else {
+        await Printing.layoutPdf(
+          onLayout: (PdfPageFormat format) async => pdf.save(),
+          name: 'Inventory_Labels',
+        );
+      }
+    } catch (e) {
+      debugPrint("Printing Error: $e");
+    }
+  }
+}
+
+
 // ==========================================================================
 // 4. UI LAYER
 // ==========================================================================
@@ -234,7 +328,6 @@ class StockPlusTransactionView extends StatefulWidget {
   State<StockPlusTransactionView> createState() => _StockPlusTransactionViewState();
 }
 
-/*
 class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
   final _noOfPcsCtrl = TextEditingController(text: "1");
   final _pcsCtrl = TextEditingController(text: "1");
@@ -243,276 +336,7 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
 
   ProductGroupEntity? selectedGroup;
   ProductSubGroupEntity? selectedSubGroup;
-  List<StockTransactionEntity> recentEntries = [];
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  // Track if we are editing an entry
-  StockTransactionEntity? editingEntity;
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<ProductGroupBloc>().add(LoadGroups());
-  }
-
-  void _hideLoading(BuildContext context) {
-    Navigator.of(context, rootNavigator: true).pop();
-  }
-
-  void _resetForm() {
-    setState(() {
-      editingEntity = null;
-      _withGstCtrl.clear();
-      _costPriceCtrl.clear();
-      _noOfPcsCtrl.text = "1";
-      _pcsCtrl.text = "1";
-      selectedGroup = null;
-      selectedSubGroup = null;
-    });
-  }
-
-  void _onEdit(StockTransactionEntity item) {
-    setState(() {
-      editingEntity = item;
-      _noOfPcsCtrl.text = item.noOfPieces.toString();
-      _pcsCtrl.text = item.pcsPerUnit.toString();
-      _withGstCtrl.text = item.priceWithGst.toString();
-      _costPriceCtrl.text = item.costPrice.toString();
-      // Dropdown selection match logic logic yahan aayega if needed
-    });
-    _scaffoldKey.currentState?.closeEndDrawer();
-  }
-
-  void _calculatePrice() {
-    if (selectedGroup == null) return;
-    double withGst = double.tryParse(_withGstCtrl.text) ?? 0;
-    double tax = (selectedGroup?.sgst ?? 0) + (selectedGroup?.cgst ?? 0);
-    double cost = withGst / (1 + (tax / 100));
-    _costPriceCtrl.text = cost.toStringAsFixed(2);
-  }
-
-  void _showMsg(String msg, {bool isError = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          backgroundColor: isError ? Colors.red.shade800 : Colors.green.shade800,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(10),
-        )
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 850;
-
-    return BlocListener<StockEntryBloc, StockEntryState>(
-      listener: (context, state) {
-        if (state is StockEntryLoading) {
-          showDialog(context: context, barrierDismissible: false, useRootNavigator: true, builder: (_) => const Center(child: CircularProgressIndicator()));
-        } else if (state is StockEntrySuccess) {
-          _hideLoading(context);
-          if (state.savedData.rawResponse != null) {
-            LabelPrintingService.generateAndPrintLabels(state.savedData.rawResponse!);
-          }
-          setState(() {
-            if (editingEntity != null) {
-              recentEntries.removeWhere((e) => e.id == editingEntity!.id);
-            }
-            recentEntries.insert(0, state.savedData);
-          });
-          _resetForm();
-          _showMsg(editingEntity == null ? "Stock Added & Printed" : "Stock Updated & Reprinted", isError: false);
-        } else if (state is StockEntryError) {
-          _hideLoading(context);
-          _showMsg(state.error);
-        }
-      },
-      child: Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: const Color(0xFFF4F7FA),
-        appBar: AppBar(
-          title: Text(editingEntity == null ? "STOCK PLUS ENTRY" : "EDIT STOCK ENTRY"),
-          actions: [
-            if (editingEntity != null) IconButton(icon: const Icon(Icons.cancel), onPressed: _resetForm),
-            IconButton(icon: const Icon(Icons.history_rounded, size: 26), onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
-            const SizedBox(width: 8),
-          ],
-        ),
-        endDrawer: _buildRightHistoryDrawer(isMobile, screenWidth),
-        body: Column(
-          children: [
-            _buildTopActionBar(isMobile),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.all(isMobile ? 16 : 24),
-                child: isMobile
-                    ? Column(children: [_buildFormCard(), const SizedBox(height: 16), _buildYellowTaxPanel()])
-                    : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(flex: 2, child: _buildFormCard()),
-                  const SizedBox(width: 20),
-                  Expanded(flex: 1, child: _buildYellowTaxPanel()),
-                ]),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopActionBar(bool isMobile) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
-      decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
-      child: ElevatedButton.icon(
-        onPressed: _onSave,
-        icon: Icon(editingEntity == null ? Icons.print_rounded : Icons.save_as_rounded),
-        label: Text(editingEntity == null ? "SAVE & PRINT LABELS" : "UPDATE & REPRINT"),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: editingEntity == null ? const Color(0xFF0F172A) : Colors.indigo.shade900,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFormCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12)]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildGroupDropdown(),
-          const SizedBox(height: 16),
-          _buildSubGroupDropdown(),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: _tf(_noOfPcsCtrl, "NO OF PIECES", isDecimal: false)),
-            const SizedBox(width: 12),
-            Expanded(child: _tf(_pcsCtrl, "PCS / UNIT", isDecimal: false)),
-          ]),
-          const SizedBox(height: 16),
-          _tf(_withGstCtrl, "PRICE WITH GST", isDecimal: true, onChange: (_) => _calculatePrice()),
-          const SizedBox(height: 16),
-          _tf(_costPriceCtrl, "COST PRICE (AUTO)", readOnly: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGroupDropdown() {
-    return BlocBuilder<ProductGroupBloc, ProductGroupState>(
-      builder: (context, state) {
-        List<ProductGroupEntity> groups = [];
-        if (state is GroupLoaded) groups = state.groups;
-        return DropdownButtonFormField<ProductGroupEntity>(
-          isExpanded: true,
-          value: groups.any((e) => e.id == selectedGroup?.id) ? selectedGroup : null,
-          decoration: _deco("PRODUCT GROUP"),
-          items: groups.map((g) => DropdownMenuItem(value: g, child: Text(g.name))).toList(),
-          onChanged: (val) {
-            setState(() { selectedGroup = val; selectedSubGroup = null; _calculatePrice(); });
-            context.read<ProductSubGroupBloc>().add(LoadSubGroups(groupId: val!.id));
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSubGroupDropdown() {
-    return BlocBuilder<ProductSubGroupBloc, SubGroupState>(
-      builder: (context, state) {
-        List<ProductSubGroupEntity> subGroups = [];
-        if (state is SubGroupLoaded) subGroups = state.subGroups;
-        return DropdownButtonFormField<ProductSubGroupEntity>(
-          isExpanded: true,
-          value: subGroups.any((e) => e.id == selectedSubGroup?.id) ? selectedSubGroup : null,
-          decoration: _deco("SUB MASTER"),
-          items: subGroups.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
-          onChanged: (val) => setState(() => selectedSubGroup = val),
-        );
-      },
-    );
-  }
-
-  Widget _buildYellowTaxPanel() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFFEF3C7))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _taxRow("SGST RATE", "${selectedGroup?.sgst ?? 0.0}%"),
-        _taxRow("CGST RATE", "${selectedGroup?.cgst ?? 0.0}%"),
-        _taxRow("HSN CODE", selectedGroup?.hsnCode ?? "N/A"),
-      ]),
-    );
-  }
-
-  Widget _buildRightHistoryDrawer(bool isMobile, double screenWidth) {
-    return Drawer(
-      width: isMobile ? screenWidth * 0.85 : screenWidth * 0.35,
-      child: Column(children: [
-        Container(padding: const EdgeInsets.all(20), color: const Color(0xFF0F172A), child: const SafeArea(child: Center(child: Text("RECENT ADDITIONS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))))),
-        Expanded(
-          child: recentEntries.isEmpty
-              ? const Center(child: Text("History is empty"))
-              : ListView.separated(
-            itemCount: recentEntries.length,
-            separatorBuilder: (_, __) => const Divider(),
-            itemBuilder: (ctx, index) {
-              final item = recentEntries[index];
-              return ListTile(
-                title: Text(item.hsnCode, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text("Qty: ${item.noOfPieces} | ₹${item.priceWithGst}"),
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _onEdit(item)),
-                  IconButton(icon: const Icon(Icons.print), onPressed: () => LabelPrintingService.generateAndPrintLabels(item.rawResponse!)),
-                ]),
-              );
-            },
-          ),
-        ),
-      ]),
-    );
-  }
-
-  void _onSave() {
-    if (selectedGroup == null || selectedSubGroup == null) { _showMsg("Select Group & Sub-Group"); return; }
-    final entity = StockTransactionEntity(
-      id: editingEntity?.id, // Important: Null for new, ID for update
-      groupId: selectedGroup!.id!,
-      subGroupId: selectedSubGroup!.id!,
-      noOfPieces: int.parse(_noOfPcsCtrl.text),
-      pcsPerUnit: int.parse(_pcsCtrl.text),
-      priceWithGst: double.parse(_withGstCtrl.text),
-      costPrice: double.parse(_costPriceCtrl.text),
-      sgstRate: selectedGroup?.sgst ?? 0.0,
-      cgstRate: selectedGroup?.cgst ?? 0.0,
-      igstRate: (selectedGroup?.sgst ?? 0.0) + (selectedGroup?.cgst ?? 0.0),
-      hsnCode: selectedGroup?.hsnCode ?? "",
-    );
-    context.read<StockEntryBloc>().add(SaveStockEntry(entity));
-  }
-
-  InputDecoration _deco(String l) => InputDecoration(labelText: l, filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)));
-  Widget _tf(TextEditingController c, String l, {bool readOnly = false, bool isDecimal = true, Function(String)? onChange}) => TextField(controller: c, readOnly: readOnly, onChanged: onChange, decoration: _deco(l), keyboardType: TextInputType.number);
-  Widget _taxRow(String l, String v) => Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l), Text(v, style: const TextStyle(fontWeight: FontWeight.bold))]));
-}*/
-
-
-class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
-  final _noOfPcsCtrl = TextEditingController(text: "1");
-  final _pcsCtrl = TextEditingController(text: "1");
-  final _withGstCtrl = TextEditingController();
-  final _costPriceCtrl = TextEditingController();
-
-  ProductGroupEntity? selectedGroup;
-  ProductSubGroupEntity? selectedSubGroup;
+  ItemLocationEntity? selectedItemLocation;
   List<StockTransactionEntity> recentEntries = [];
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -523,10 +347,10 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
   void initState() {
     super.initState();
     context.read<ProductGroupBloc>().add(LoadGroups());
-    _loadHistory(); // 🔄 Persistence: Load from server on startup
+    context.read<ItemLocationBloc>().add(LoadLocations());
+    _loadHistory();
   }
 
-  // LOGIC: Data persistence fetch
   Future<void> _loadHistory() async {
     setState(() => isHistoryLoading = true);
     try {
@@ -606,6 +430,8 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
       _pcsCtrl.text = "1";
       selectedGroup = null;
       selectedSubGroup = null;
+      selectedItemLocation = null;
+
     });
   }
 
@@ -703,13 +529,15 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
   Widget _buildFormCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12)]),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withAlpha(2), blurRadius: 12)]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildGroupDropdown(),
           const SizedBox(height: 16),
           _buildSubGroupDropdown(),
+          const SizedBox(height: 16),
+          _buildLocationDropdown(),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: _tf(_noOfPcsCtrl, "NO OF PIECES", isDecimal: false)),
@@ -766,6 +594,37 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
     );
   }
 
+  Widget _buildLocationDropdown() {
+    return BlocBuilder<ItemLocationBloc, ItemLocationState>(
+      builder: (context, state) {
+        // 1. Correct the List type and state check
+        List<ItemLocationEntity> locations = [];
+        if (state is LocationLoaded) {
+          locations = state.locations;
+        }
+
+        return DropdownButtonFormField<ItemLocationEntity>(
+          isExpanded: true,
+          // 2. Correct the value matching logic to use selectedLocation
+          value: locations.any((e) => e.id == selectedItemLocation?.id)
+              ? locations.firstWhere((e) => e.id == selectedItemLocation?.id)
+              : null,
+          decoration: _deco("ITEM LOCATION / RACK"),
+          // 3. Map the items using ItemLocationEntity
+          items: locations.map((loc) => DropdownMenuItem<ItemLocationEntity>(
+            value: loc,
+            child: Text(loc.name),
+          )).toList(),
+          onChanged: (val) {
+            setState(() {
+              selectedItemLocation = val; // 4. Update the correct state variable
+            });
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildYellowTaxPanel() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -793,7 +652,7 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
               final item = recentEntries[index];
               return ListTile(
                 title: Text(item.hsnCode, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text("Qty: ${item.noOfPieces} | ₹${item.priceWithGst}\n${item.createdAt??""}"),
+                subtitle: Text("Qty: ${item.noOfPieces} | ₹${item.priceWithGst}\n${item.itemLocationName??"No Rack"}\n${item.createdAt??""}"),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _onEdit(item)),
                   IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _confirmDelete(item.id!)),
@@ -810,8 +669,8 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
 
   void _onSave() {
     // 1. Basic Validation
-    if (selectedGroup == null || selectedSubGroup == null) {
-      _showMsg("Select Group & Sub-Group");
+    if (selectedGroup == null || selectedSubGroup == null || selectedItemLocation == null) {
+      _showMsg("Select Group , Sub-Group & Item-Location");
       return;
     }
     if (_noOfPcsCtrl.text.isEmpty || _withGstCtrl.text.isEmpty) {
@@ -841,6 +700,7 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
             _summaryRow("Sub-Master:", selectedSubGroup?.name ?? ""),
             _summaryRow("Total Pieces:", _noOfPcsCtrl.text),
             _summaryRow("Price/Unit:", "₹${_withGstCtrl.text}"),
+            _summaryRow("Item Location:", selectedItemLocation?.name ??""),
             const Divider(height: 24),
             const Text(
               "Note: After saving stock barcode will autogenerate.",
@@ -876,6 +736,7 @@ class _StockPlusTransactionViewState extends State<StockPlusTransactionView> {
       id: editingEntity?.id,
       groupId: selectedGroup!.id!,
       subGroupId: selectedSubGroup!.id!,
+      locationId: selectedItemLocation!.id!,
       noOfPieces: int.parse(_noOfPcsCtrl.text),
       pcsPerUnit: int.parse(_pcsCtrl.text),
       priceWithGst: double.parse(_withGstCtrl.text),

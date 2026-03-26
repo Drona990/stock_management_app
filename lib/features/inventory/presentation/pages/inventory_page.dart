@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:stock_management/features/inventory/presentation/bloc/item_location_bloc.dart';
 import 'package:stock_management/features/inventory/presentation/widget/inventory_group_subgroup_view.dart';
 import 'package:stock_management/features/inventory/presentation/widget/location_view.dart';
 import '../../../../../injection.dart';
@@ -8,6 +9,7 @@ import '../bloc/inventory_group_subgroup_bloc.dart';
 import 'package:stock_management/features/inventory/presentation/widget/item_category_view.dart';
 
 import '../bloc/location_bloc.dart';
+import '../widget/item_location_view.dart';
 
 class InventoryPage extends StatefulWidget {
   const InventoryPage({super.key});
@@ -26,8 +28,7 @@ class _InventoryPageState extends State<InventoryPage> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    // Total 6 Tabs: Category, Units, Brand, Tax, Product, Wastage
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -39,7 +40,7 @@ class _InventoryPageState extends State<InventoryPage> with SingleTickerProvider
         BlocProvider(create: (context) => sl<ProductGroupBloc>()),
         BlocProvider(create: (context) => sl<ProductSubGroupBloc>()),
         BlocProvider(create: (context) => sl<LocationBloc>()),
-
+        BlocProvider(create: (context) => sl<ItemLocationBloc>()),
       ],
       child: Scaffold(
         backgroundColor: surfaceGrey,
@@ -68,7 +69,9 @@ class _InventoryPageState extends State<InventoryPage> with SingleTickerProvider
             tabs: const [
               Tab(child: _TabLabel(Icons.category_outlined, "Manage Category")),
               Tab(child: _TabLabel(Icons.category_outlined, "Group Sub Group")),
-              Tab(child: _TabLabel(Icons.category_outlined, "Manage Location")),
+              Tab(child: _TabLabel(Icons.category_outlined, "Manage Staff Location")),
+              Tab(child: _TabLabel(Icons.warehouse_outlined, "Manage Item Location")),
+
 
             ],
           ),
@@ -79,6 +82,8 @@ class _InventoryPageState extends State<InventoryPage> with SingleTickerProvider
             const CategoryView(),
             const InventoryGroupSubgroupView(),
             const LocationView(),
+            const ItemLocationView(),
+
           ],
         ),
       ),

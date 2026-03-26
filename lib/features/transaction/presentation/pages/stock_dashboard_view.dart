@@ -36,7 +36,6 @@ class DashboardRepository {
   final ApiClient _api = sl<ApiClient>();
   Future<DashboardModel> getSummary() async {
     final res = await _api.get('/api/inventory/dashboard/');
-    print("dashboard data is: $res");
     return DashboardModel.fromJson(res.data);
   }
 
@@ -74,9 +73,9 @@ class _StockDashboardViewState extends State<StockDashboardView> {
   List<dynamic> _locations = [];
   final List<Map<String, dynamic>> _months = [{"id": 1, "name": "January"}, {"id": 2, "name": "February"}, {"id": 3, "name": "March"}, {"id": 4, "name": "April"}, {"id": 5, "name": "May"}, {"id": 6, "name": "June"}, {"id": 7, "name": "July"}, {"id": 8, "name": "August"}, {"id": 9, "name": "September"}, {"id": 10, "name": "October"}, {"id": 11, "name": "November"}, {"id": 12, "name": "December"}];
 
-  @override void initState() { super.initState(); _fetchLocs(); }
+  @override void initState() { super.initState(); _fetchLocation(); }
 
-  Future<void> _fetchLocs() async {
+  Future<void> _fetchLocation() async {
     final res = await sl<ApiClient>().get('/api/inventory/locations/');
     setState(() { _locations = res.data is List ? res.data : res.data['results'] ?? []; });
   }
@@ -104,7 +103,7 @@ class _StockDashboardViewState extends State<StockDashboardView> {
           // For mobile, we might want to wrap actions or use a popup menu if too many
           actions: [
             _actionBtn(
-              "Master Report",
+              "MASTER REPORT",
               Colors.blueAccent,
                   () => _showMasterReportDialog(),
             ),
@@ -175,7 +174,7 @@ class _StockDashboardViewState extends State<StockDashboardView> {
       decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)],
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(2), blurRadius: 4)],
           border: Border(left: BorderSide(color: c, width: 4))
       ),
       child: Center(

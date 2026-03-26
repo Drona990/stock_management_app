@@ -1,27 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:stock_management/features/inventory/presentation/bloc/location_bloc.dart'; // Adjust path
+import 'package:stock_management/features/inventory/presentation/bloc/item_location_bloc.dart';
 
-class LocationView extends StatefulWidget {
-  const LocationView({super.key});
+class ItemLocationView extends StatefulWidget {
+  const ItemLocationView({super.key});
 
   @override
-  State<LocationView> createState() => _LocationViewState();
+  State<ItemLocationView> createState() => _ItemLocationViewState();
 }
 
-class _LocationViewState extends State<LocationView> {
+class _ItemLocationViewState extends State<ItemLocationView> {
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     // Fetch locations on initialization
-    context.read<LocationBloc>().add(LoadLocations());
+    context.read<ItemLocationBloc>().add(LoadLocations());
   }
 
   @override
   Widget build(BuildContext context) {
-    final bloc = context.read<LocationBloc>();
+    final bloc = context.read<ItemLocationBloc>();
 
     return Container(
       color: const Color(0xFFF4F7FA),
@@ -29,9 +29,9 @@ class _LocationViewState extends State<LocationView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("User Location Management",
+          const Text("Item Location Management",
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-          const Text("Manage your Staff working locations",
+          const Text("Manage your raw material and item locations",
               style: TextStyle(color: Colors.grey, fontSize: 14)),
           const SizedBox(height: 24),
           Row(
@@ -68,7 +68,7 @@ class _LocationViewState extends State<LocationView> {
           ),
           const SizedBox(height: 24),
           Expanded(
-            child: BlocBuilder<LocationBloc, LocationState>(
+            child: BlocBuilder<ItemLocationBloc, ItemLocationState>(
               builder: (context, state) {
                 if (state is LocationLoading) return const Center(child: CircularProgressIndicator());
                 if (state is LocationLoaded) return _buildTable(state.locations, bloc);
@@ -82,7 +82,7 @@ class _LocationViewState extends State<LocationView> {
     );
   }
 
-  Widget _buildTable(List<LocationEntity> list, LocationBloc bloc) {
+  Widget _buildTable(List<ItemLocationEntity> list, ItemLocationBloc bloc) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -118,7 +118,7 @@ class _LocationViewState extends State<LocationView> {
     );
   }
 
-  Widget _buildLocationRow(LocationEntity location, LocationBloc bloc) {
+  Widget _buildLocationRow(ItemLocationEntity location, ItemLocationBloc bloc) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
@@ -144,7 +144,7 @@ class _LocationViewState extends State<LocationView> {
     );
   }
 
-  void _showFormDialog(BuildContext context, LocationBloc bloc, {LocationEntity? location}) {
+  void _showFormDialog(BuildContext context, ItemLocationBloc bloc, {ItemLocationEntity? location}) {
     final nameController = TextEditingController(text: location?.name);
 
     showDialog(
@@ -158,7 +158,7 @@ class _LocationViewState extends State<LocationView> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(location == null ? "New Staff Location" : "Edit Location",
+              Text(location == null ? "New Inventory Location" : "Edit Location",
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 24),
               _buildField(nameController, "Location Name"),
@@ -181,7 +181,7 @@ class _LocationViewState extends State<LocationView> {
                       ),
                       onPressed: () {
                         if (nameController.text.isNotEmpty) {
-                          final entity = LocationEntity(
+                          final entity = ItemLocationEntity(
                             name: nameController.text,
                           );
                           if (location == null) {

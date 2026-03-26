@@ -9,6 +9,7 @@ import '../../core/utils/app_routes.dart';
 import 'core/theme/app_color.dart';
 import 'features/auth/presentation/block/login_bloc.dart';
 import 'features/inventory/presentation/bloc/inventory_group_subgroup_bloc.dart';
+import 'features/inventory/presentation/bloc/item_location_bloc.dart';
 import 'features/inventory/presentation/bloc/location_bloc.dart';
 import 'injection.dart';
 
@@ -28,6 +29,8 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (_) => sl<DashboardBloc>()),
         BlocProvider(create: (_) => sl<LocationBloc>()),
         BlocProvider(create: (_) => sl<ReturnBloc>()),
+        BlocProvider(create: (_) => sl<ItemLocationBloc>()),
+
       ],
       child: MaterialApp.router(
         debugShowCheckedModeBanner: false,
