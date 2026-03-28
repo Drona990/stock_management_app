@@ -237,7 +237,7 @@ class LabelPrintingService {
 
     final List barcodes = data['barcode_list'] ?? [];
     final String subGroupName = (data['sub_group_name'] ?? "ITEM").toString().toUpperCase();
-    final String price = data['price_with_gst']?.toString() ?? "0.00";
+    final String price = (data['price_with_gst']?.toString() ?? "0").split('.')[0];
     final shop = data['shop_details'] ?? {};
 
 
@@ -255,11 +255,12 @@ class LabelPrintingService {
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
               pw.Text(shop['name']?.toUpperCase(),
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+              pw.Text("Premium Stock",
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5)),
               pw.Divider(thickness: 0.5),
-
               pw.Text("DISCOUNT PRICE",
-                  style: pw.TextStyle(fontSize: 4.5, fontWeight: pw.FontWeight.bold)),
+                  style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
               pw.Text("$price /-",
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 15)),
 
@@ -267,21 +268,16 @@ class LabelPrintingService {
               pw.Text(subGroupName,
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-
-              pw.Spacer(),
-
               pw.Center(
                 child: pw.BarcodeWidget(
                   barcode: pw.Barcode.code128(),
                   data: code.toString(),
-                  height: 25,
+                  height: 20,
                   width: 26 * PdfPageFormat.mm,
                   drawText: true,
                   textStyle: pw.TextStyle(fontSize: 5),
                 ),
               ),
-
-              pw.SizedBox(height: 1),
               pw.Text("NO EXCHANGE / NO RETURN",
                   style: pw.TextStyle(fontSize: 4.5, fontWeight: pw.FontWeight.bold)),
               pw.Divider(thickness: 0.3, height: 3),
