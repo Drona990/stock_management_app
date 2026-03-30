@@ -33,7 +33,7 @@ class _LoginPageState extends State<LoginPage> {
             children: [
 
               if (isDesktop) ...[
-                const Icon(Icons.restaurant_menu, size: 40, color: cyanPrimary),
+                const Icon(Icons.business_outlined, size: 40, color: cyanPrimary),
                 const SizedBox(height: 10),
                 const Text("STOCK MANAGEMENT SYSTEM",
                     style: TextStyle(color: Colors.white, letterSpacing: 2, fontWeight: FontWeight.w600)),

@@ -1,16 +1,20 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:stock_management/features/masters/presentation/pages/customer_master_screen.dart';
+import 'package:stock_management/features/masters/presentation/pages/supplier_master_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/rreturn_exchange_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/salse_bill_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_dashboard_view.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_plus_screen.dart';
+import 'package:stock_management/features/transaction/presentation/pages/transaction_entry_screen.dart';
 import '../../core/utils/app_routes.dart';
 import 'core/theme/app_color.dart';
 import 'features/auth/presentation/block/login_bloc.dart';
 import 'features/inventory/presentation/bloc/inventory_group_subgroup_bloc.dart';
 import 'features/inventory/presentation/bloc/item_location_bloc.dart';
 import 'features/inventory/presentation/bloc/location_bloc.dart';
+import 'features/masters/presentation/pages/uom_master_screen.dart';
 import 'injection.dart';
 
 class MyApp extends StatelessWidget {
@@ -30,6 +34,12 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (_) => sl<LocationBloc>()),
         BlocProvider(create: (_) => sl<ReturnBloc>()),
         BlocProvider(create: (_) => sl<ItemLocationBloc>()),
+        BlocProvider(create: (_) => sl<CustomerBloc>()),
+        BlocProvider(create: (_) => sl<SupplierBloc>()),
+        BlocProvider(create: (_) => sl<UomBloc>()),
+        BlocProvider(create: (_) => sl<TransactionBloc>()),
+
+
 
       ],
       child: MaterialApp.router(

@@ -4,11 +4,15 @@ import 'package:get_it/get_it.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:stock_management/features/auth/presentation/pages/login_page.dart';
 import 'package:stock_management/features/inventory/presentation/pages/inventory_page.dart';
+import 'package:stock_management/features/masters/presentation/pages/uom_master_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_dashboard_view.dart';
 import '../../features/main/presentation/pages/bar&resturant/user_management_page.dart';
+import '../../features/masters/presentation/pages/customer_master_screen.dart';
+import '../../features/masters/presentation/pages/supplier_master_screen.dart';
 import '../../features/transaction/presentation/pages/my_report.dart';
 import '../../features/transaction/presentation/pages/rreturn_exchange_screen.dart';
 import '../../features/transaction/presentation/pages/salse_bill_screen.dart';
+import '../../features/transaction/presentation/pages/transaction_entry_screen.dart';
 import '../../features/transaction/presentation/pages/stock_plus_screen.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
 import '../../features/main/presentation/pages/bar&resturant/main_dashboard.dart';
@@ -79,6 +83,28 @@ class AppRouter {
             child: child
         ),
         routes: [
+          GoRoute(
+            path: '/customer_master',
+            builder: (context, state) => const CustomerMasterScreen(),
+          ),
+          GoRoute(
+            path: '/supplier_master',
+            builder: (context, state) => const SupplierMasterScreen(),
+          ),
+          GoRoute(
+            path: '/uom_master',
+            builder: (context, state) => const UomView(),
+          ),
+
+          GoRoute(
+            path: '/sales_transaction',
+            builder: (context, state) => const TransactionTerminalScreen(isSales:true),
+          ),
+
+          GoRoute(
+            path: '/purchase_transaction',
+            builder: (context, state) => const TransactionTerminalScreen(isSales:false),
+          ),
           // 🏛️ Admin/Manager Only Routes
           GoRoute(path: '/dashboard', builder: (context, state) => const StockDashboardView()),
           GoRoute(path: '/manage_user', builder: (context, state) => const UserManagementPage()),
@@ -89,8 +115,6 @@ class AppRouter {
           GoRoute(path: '/sales_bill', builder: (context, state) => const SalesBillingView()),
           GoRoute(path: '/return', builder: (context, state) => const ReturnExchangeScreen()),
 
-
-          // ✅ NEW: My Reports Route (Staff can see their own reports)
           GoRoute(path: '/my_reports', builder: (context, state) => const MyReportsView()),
         ],
       ),
