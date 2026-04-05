@@ -10,9 +10,9 @@ import '../../../../injection.dart';
 // ==========================================================================
 
 class SupplierEntity {
-  final int? id; // supplier_no in DB
+  final int? id;
   final String name, address, mobileNo, city, pinCode, email, gstNumber;
-  final String bankName, accountNo, ifscCode, panNo;
+  final String bankName, accountNo, bankAddress, ifscCode, panNo;
   final String sName, sAddr, sMobile, sCity, sPin, sGst;
   final double openingCr, openingDr;
   final int creditDays;
@@ -25,7 +25,7 @@ class SupplierEntity {
     required this.sName, required this.sAddr, required this.sMobile, required this.sCity,
     required this.sPin, required this.sGst,
     required this.openingCr, required this.openingDr, required this.creditDays,
-    required this.batchNumber, required this.mop, required this.createdBy,
+    required this.batchNumber, required this.mop, required this.createdBy, required this.bankAddress,
   });
 
   Map<String, dynamic> toJson() => {
@@ -38,6 +38,7 @@ class SupplierEntity {
     "gst_number": gstNumber,
     "pan_no": panNo,
     "bank_name": bankName,
+    "bank_address": bankAddress,
     "account_no": accountNo,
     "ifsc_code": ifscCode,
     "shipping_name": sName,
@@ -65,6 +66,7 @@ class SupplierEntity {
     gstNumber: json['gst_number'] ?? "",
     panNo: json['pan_no'] ?? "",
     bankName: json['bank_name'] ?? "",
+    bankAddress: json['bank_address'] ?? "",
     accountNo: json['account_no'] ?? "",
     ifscCode: json['ifsc_code'] ?? "",
     sName: json['shipping_name'] ?? "",
@@ -124,10 +126,21 @@ class SupplierBloc extends Bloc<SupplierEvent, SupplierState> {
     on<SaveSupplierEvent>((event, emit) async {
       try {
         await repo.save(event.supplier);
-        emit(SupplierSuccess("Supplier Processed!"));
+        emit(SupplierSuccess("Supplier Processed Successfully!"));
         final data = await repo.fetchAll();
         emit(SupplierLoaded(data));
-      } catch (e) { emit(SupplierError(e.toString())); }
+      } catch (e) {
+        String errorMsg = "Something went wrong";
+        if (e.toString().contains("already exists")) {
+          errorMsg = "A record with this name already exists (Duplicate Name)!";
+        } else if (e.toString().contains("400")) {
+          errorMsg = "Validation Error: Please check all fields.";
+        } else {
+          errorMsg = e.toString();
+        }
+
+        emit(SupplierError(errorMsg));
+      }
     });
   }
 }
@@ -158,6 +171,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
 
   // Bank & Terms
   final _bankCtrl = TextEditingController();
+  final _bankAddressCtrl = TextEditingController();
   final _accCtrl = TextEditingController();
   final _ifscCtrl = TextEditingController();
   final _daysCtrl = TextEditingController(text: "30");
@@ -211,6 +225,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       bankName: _bankCtrl.text.trim(),
       accountNo: _accCtrl.text.trim(),
       ifscCode: _ifscCtrl.text.trim(),
+      bankAddress: _bankAddressCtrl.text.trim(),
       sName: _sNameCtrl.text.trim(),
       sAddr: _sAddrCtrl.text.trim(),
       sMobile: _sMobileCtrl.text.trim(),
@@ -233,7 +248,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       _nameCtrl.text = item.name; _mobileCtrl.text = item.mobileNo; _addrCtrl.text = item.address;
       _cityCtrl.text = item.city; _pinCtrl.text = item.pinCode; _emailCtrl.text = item.email;
       _gstCtrl.text = item.gstNumber; _panCtrl.text = item.panNo;
-      _bankCtrl.text = item.bankName; _accCtrl.text = item.accountNo; _ifscCtrl.text = item.ifscCode;
+      _bankCtrl.text = item.bankName; _accCtrl.text = item.accountNo; _ifscCtrl.text = item.ifscCode;_bankAddressCtrl.text = item.bankAddress;
       _sNameCtrl.text = item.sName; _sAddrCtrl.text = item.sAddr; _sMobileCtrl.text = item.sMobile;
       _sCityCtrl.text = item.sCity; _sPinCtrl.text = item.sPin; _sGstCtrl.text = item.sGst;
       _crCtrl.text = item.openingCr.toString(); _drCtrl.text = item.openingDr.toString();
@@ -245,7 +260,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
   void _resetForm() {
     setState(() {
       editingSupplier = null;
-      for (var c in [_nameCtrl, _mobileCtrl, _addrCtrl, _cityCtrl, _pinCtrl, _emailCtrl, _gstCtrl, _panCtrl, _bankCtrl, _accCtrl, _ifscCtrl, _sNameCtrl, _sAddrCtrl, _sMobileCtrl, _sCityCtrl, _sPinCtrl, _sGstCtrl]) { c.clear(); }
+      for (var c in [_nameCtrl, _mobileCtrl, _addrCtrl, _cityCtrl, _pinCtrl, _emailCtrl, _gstCtrl, _panCtrl, _bankCtrl, _accCtrl, _ifscCtrl, _sNameCtrl, _sAddrCtrl, _sMobileCtrl, _sCityCtrl, _sPinCtrl, _sGstCtrl,_bankAddressCtrl]) { c.clear(); }
       _crCtrl.text = "0"; _drCtrl.text = "0"; _daysCtrl.text = "30";
     });
   }
@@ -256,9 +271,20 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
   Widget build(BuildContext context) {
     return BlocConsumer<SupplierBloc, SupplierState>(
       listener: (context, state) {
-        if (state is SupplierSuccess || state is SupplierError) { if (Navigator.of(context, rootNavigator: true).canPop()) Navigator.of(context, rootNavigator: true).pop(); }
-        if (state is SupplierSuccess) { _showSnackbar(state.message, Colors.green); _resetForm(); }
-        if (state is SupplierError) { _showSnackbar(state.error, Colors.red); }
+        if (state is SupplierSuccess || state is SupplierError) {
+          if (Navigator.of(context, rootNavigator: true).canPop()) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
+        }
+
+        if (state is SupplierSuccess) {
+          _showSnackbar(state.message, Colors.green);
+          _resetForm();
+        }
+
+        if (state is SupplierError) {
+          _showSnackbar(state.error, Colors.redAccent);
+        }
       },
       builder: (context, state) {
         return Scaffold(
@@ -380,7 +406,13 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
           _sectionLabel("VENDOR PRIMARY INFORMATION"),
           const SizedBox(height: 15),
           _responsiveRow(width, [
-            _tf(_nameCtrl, "Vendor Name", Icons.storefront, flex: 2),
+            _tf(
+                _nameCtrl,
+                "Vendor Name",
+                Icons.storefront,
+                flex: 2,
+                readOnly: editingSupplier != null // Edit mode mein lock
+            ),
             _tf(_mobileCtrl, "Contact No", Icons.phone, isNum: true),
           ]),
           const SizedBox(height: 15),
@@ -406,14 +438,36 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
             _tf(_bankCtrl, "Bank Name", Icons.account_balance),
             _tf(_accCtrl, "Account No", Icons.numbers, isNum: true, flex: 2),
             _tf(_ifscCtrl, "IFSC Code", Icons.code),
+            _tf(_bankAddressCtrl, "Branch & Address Details", Icons.account_balance),
+
           ]),
           const SizedBox(height: 30),
           _sectionLabel("ACCOUNTS & LEDGER"),
           const SizedBox(height: 15),
           _responsiveRow(width, [
             _tf(_daysCtrl, "Credit Period (Days)", Icons.timer, isNum: true),
-            _tf(_crCtrl, "Opening CR", Icons.add_circle, color: Colors.green, isNum: true),
-            _tf(_drCtrl, "Opening DR", Icons.remove_circle, color: Colors.red, isNum: true),
+
+            // Balance CR Logic
+            _tf(_crCtrl, "Opening CR", Icons.add_circle,
+                color: Colors.green,
+                isNum: true,
+                onCh: (v) {
+                  if (v.isNotEmpty && v != "0") {
+                    setState(() => _drCtrl.text = "0");
+                  }
+                }
+            ),
+
+            // Balance DR Logic
+            _tf(_drCtrl, "Opening DR", Icons.remove_circle,
+                color: Colors.red,
+                isNum: true,
+                onCh: (v) {
+                  if (v.isNotEmpty && v != "0") {
+                    setState(() => _crCtrl.text = "0");
+                  }
+                }
+            ),
           ]),
           const SizedBox(height: 30),
           ExpansionTile(
@@ -445,28 +499,30 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: children.map((c) => Expanded(flex: (c is _FlexWidget) ? c.flex : 1, child: Padding(padding: const EdgeInsets.only(right: 15), child: c))).toList());
   }
 
-  Widget _tf(TextEditingController c, String l, IconData i, {int maxLines = 1, Color? color, bool isNum = false, int flex = 1}) {
-    return _FlexWidget(
-      flex: flex,
-      child: TextFormField(
-        controller: c,
-        maxLines: maxLines,
-        style: TextStyle(color: color, fontSize: 13),
-        // ENTER KEY NAVIGATION:
-        textInputAction: TextInputAction.next,
-        onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
-        // NUMERIC HANDLING:
-        keyboardType: isNum ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
-        inputFormatters: isNum ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))] : null,
-        decoration: InputDecoration(
-          labelText: l,
-          prefixIcon: Icon(i, size: 18),
-          isDense: true,
-          filled: true,
-          fillColor: Colors.grey.shade50,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          labelStyle: const TextStyle(fontSize: 12),
-        ),
+  Widget _tf(TextEditingController c, String l, IconData i, {
+    int maxLines = 1,
+    Color? color,
+    bool isNum = false,
+    bool readOnly = false,
+    int flex = 1,
+    Function(String)? onCh,
+  }) {
+    return TextFormField(
+      controller: c,
+      maxLines: maxLines,
+      readOnly: readOnly,
+      onChanged: onCh,
+      style: TextStyle(color: color, fontSize: 13),
+      keyboardType: isNum ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+      inputFormatters: isNum ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))] : null,
+      decoration: InputDecoration(
+        labelText: l,
+        prefixIcon: Icon(i, size: 19),
+        isDense: true,
+        filled: true,
+        fillColor: readOnly ? Colors.grey.shade200 : Colors.grey.shade50,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        labelStyle: const TextStyle(fontSize: 12),
       ),
     );
   }
@@ -530,6 +586,8 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                       SizedBox(width: 160, child: _infoItem("Contact", item.mobileNo, Icons.phone)),
                       SizedBox(width: 140, child: _infoItem("City", item.city, Icons.location_city)),
                       SizedBox(width: 160, child: _infoItem("Bank", item.bankName, Icons.account_balance)),
+                      SizedBox(width: 160, child: _infoItem("Bank/Branch Address", item.bankAddress, Icons.account_balance)),
+
                     ],
                   ),
                   const Divider(height: 25),

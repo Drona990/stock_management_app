@@ -5,10 +5,16 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:stock_management/features/auth/presentation/pages/login_page.dart';
 import 'package:stock_management/features/inventory/presentation/pages/inventory_page.dart';
 import 'package:stock_management/features/masters/presentation/pages/uom_master_screen.dart';
+import 'package:stock_management/features/reports/presentation/pages/ledger_transacton_report_screen.dart';
+import 'package:stock_management/features/transaction/presentation/pages/journal_entry_page.py.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_dashboard_view.dart';
 import '../../features/main/presentation/pages/bar&resturant/user_management_page.dart';
 import '../../features/masters/presentation/pages/customer_master_screen.dart';
+import '../../features/masters/presentation/pages/ledger_entry_screen.dart';
 import '../../features/masters/presentation/pages/supplier_master_screen.dart';
+import '../../features/reports/presentation/pages/purchase_ledger_report_page.dart';
+import '../../features/reports/presentation/pages/sales_ledger_report_page.dart';
+import '../../features/transaction/presentation/pages/cash_transaction_page.dart';
 import '../../features/transaction/presentation/pages/my_report.dart';
 import '../../features/transaction/presentation/pages/rreturn_exchange_screen.dart';
 import '../../features/transaction/presentation/pages/salse_bill_screen.dart';
@@ -105,6 +111,34 @@ class AppRouter {
             path: '/purchase_transaction',
             builder: (context, state) => const TransactionTerminalScreen(isSales:false),
           ),
+          GoRoute(
+            path: '/sales_ledger_report',
+            builder: (context, state) => const SalesLedgerReportPage(),
+          ),
+          GoRoute(
+            path: '/purchase_ledger_report',
+            builder: (context, state) => const PurchaseLedgerReportPage(),
+          ),
+
+          GoRoute(
+            path: '/ledger_screen',
+            builder: (context, state) => const LedgerMasterPage(),
+          ),
+          GoRoute(
+            path: '/ledger_summary',
+            builder: (context, state) => const LedgerReportScreen(),
+          ),
+          GoRoute(
+            path: '/cash_transaction',
+            builder: (context, state) => const CashTransactionPage(),
+          ),
+          GoRoute(
+            path: '/journal_entry',
+            builder: (context, state) => const JournalEntryPage(),
+          ),
+
+
+
           // 🏛️ Admin/Manager Only Routes
           GoRoute(path: '/dashboard', builder: (context, state) => const StockDashboardView()),
           GoRoute(path: '/manage_user', builder: (context, state) => const UserManagementPage()),

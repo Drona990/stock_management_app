@@ -2,7 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:stock_management/features/masters/presentation/pages/customer_master_screen.dart';
+import 'package:stock_management/features/masters/presentation/pages/ledger_entry_screen.dart';
 import 'package:stock_management/features/masters/presentation/pages/supplier_master_screen.dart';
+import 'package:stock_management/features/reports/presentation/bloc/salse_purchase_legder_report_bloc.dart';
 import 'package:stock_management/features/transaction/presentation/pages/rreturn_exchange_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/salse_bill_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_dashboard_view.dart';
@@ -15,6 +17,8 @@ import 'features/inventory/presentation/bloc/inventory_group_subgroup_bloc.dart'
 import 'features/inventory/presentation/bloc/item_location_bloc.dart';
 import 'features/inventory/presentation/bloc/location_bloc.dart';
 import 'features/masters/presentation/pages/uom_master_screen.dart';
+import 'features/transaction/presentation/pages/cash_transaction_page.dart';
+import 'features/transaction/presentation/pages/journal_entry_page.py.dart';
 import 'injection.dart';
 
 class MyApp extends StatelessWidget {
@@ -38,8 +42,10 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (_) => sl<SupplierBloc>()),
         BlocProvider(create: (_) => sl<UomBloc>()),
         BlocProvider(create: (_) => sl<TransactionBloc>()),
-
-
+        BlocProvider(create: (_) => sl<LedgerBloc>()),
+        BlocProvider(create: (_) => sl<LedgerMasterBloc>()),
+        BlocProvider(create: (_) => sl<CashTransactionBloc>()),
+        BlocProvider(create: (_) => sl<JournalBloc>()),
 
       ],
       child: MaterialApp.router(

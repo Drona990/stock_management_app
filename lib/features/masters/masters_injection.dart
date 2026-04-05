@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 import 'package:stock_management/features/masters/presentation/pages/customer_master_screen.dart';
+import 'package:stock_management/features/masters/presentation/pages/ledger_entry_screen.dart';
 import 'package:stock_management/features/masters/presentation/pages/supplier_master_screen.dart';
 import 'package:stock_management/features/masters/presentation/pages/uom_master_screen.dart';
 
@@ -13,6 +14,9 @@ Future<void> mastersInjection(GetIt sl) async {
 
   sl.registerLazySingleton<UomRepository>(() => UomRepository());
   sl.registerFactory(() => UomBloc(sl<UomRepository>()));
+
+  sl.registerLazySingleton<LedgerMasterRepository>(() => LedgerMasterRepository());
+  sl.registerFactory(() => LedgerMasterBloc(sl<LedgerMasterRepository>()));
 
 
 }

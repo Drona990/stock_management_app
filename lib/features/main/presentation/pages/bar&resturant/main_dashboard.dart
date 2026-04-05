@@ -693,8 +693,7 @@ class _MainDashboardState extends State<MainDashboard> {
                     _buildSubItem("Customer Master", "/customer_master"),
                     _buildSubItem("Supplier Master", "/supplier_master"),
                     _buildSubItem("Unit Master", "/uom_master"),
-
-                    _buildSubItem("Ledger Creation", "/ledger"),
+                    _buildSubItem("Ledger", "/ledger_screen"),
                   ],
                 ),
 
@@ -706,6 +705,8 @@ class _MainDashboardState extends State<MainDashboard> {
                   children: [
                     _buildSubItem("Sales", "/sales_transaction"),
                     _buildSubItem("Purchase", "/purchase_transaction"),
+                    _buildSubItem("Cash", "/cash_transaction"),
+                    _buildSubItem("Journal Entry", "/journal_entry"),
                   ],
                 ),
 
@@ -716,10 +717,9 @@ class _MainDashboardState extends State<MainDashboard> {
                   label: "Reports Center",
                   isExtended: isExtended,
                   children: [
-                    _buildSubItem("Sales Reports", "/sales_report"),
-                    _buildSubItem("Stock Reports", "/stock_report"),
-                    _buildSubItem("GST Reports", "/gst_report"),
-                    _buildSubItem("Ledger Summary", "/ledger_report"),
+                    _buildSubItem("Sales Reports", "/sales_ledger_report"),
+                    _buildSubItem("Purchase Reports", "/purchase_ledger_report"),
+                    _buildSubItem("Journal Report", "/ledger_summary"),
                   ],
                 ),
 
@@ -760,11 +760,11 @@ class _MainDashboardState extends State<MainDashboard> {
       child: ExpansionTile(
         initiallyExpanded: _expandedGroup == label,
         onExpansionChanged: (val) => setState(() => _expandedGroup = val ? label : null),
-        leading: Icon(icon, color: _expandedGroup == label ? cyanPrimary : darkGrey), // Parent Icon Color
+        leading: Icon(icon, color: _expandedGroup == label ? cyanPrimary : darkGrey),
         title: Text(label, style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: _expandedGroup == label ? cyanPrimary : darkGrey // Parent Text Color
+            color: _expandedGroup == label ? cyanPrimary : darkGrey
         )),
         children: children,
       ),

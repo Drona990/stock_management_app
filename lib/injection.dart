@@ -9,6 +9,7 @@ import 'core/network/api_client.dart';
 import 'core/network/network_info.dart';
 import 'core/utils/websocket/websocket_service.dart';
 import 'features/auth/auth_injection.dart';
+import 'features/reports/report_injection.dart';
 
 final sl = GetIt.instance;
 
@@ -39,5 +40,7 @@ Future<void> init() async {
   await initInventoryInjection(sl);
   await initTnxInjection(sl);
   await mastersInjection(sl);
+  await reportInjection(sl);
+
 
 }

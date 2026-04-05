@@ -11,7 +11,7 @@ import '../../../../injection.dart';
 
 class CustomerEntity {
   final int? id;
-  final String name, address, mobile, city, pincode, email, gstNo;
+  final String name, address, mobile, city, pincode, email, gstNo,bankName,accountNo, bankAddress, ifscCode;
   final String shipName, shipAddress, shipMobile, shipCity, shipPincode, shipGst;
   final double openingCr, openingDr;
   final String batchNo, createdBy;
@@ -22,7 +22,7 @@ class CustomerEntity {
     required this.shipName, required this.shipAddress, required this.shipMobile,
     required this.shipCity, required this.shipPincode, required this.shipGst,
     required this.openingCr, required this.openingDr,
-    required this.batchNo, required this.createdBy,
+    required this.batchNo, required this.createdBy, required this.bankName,required this.bankAddress,required this.accountNo,required this.ifscCode,
   });
 
   Map<String, dynamic> toJson() => {
@@ -32,6 +32,10 @@ class CustomerEntity {
     "shipping_city": shipCity, "shipping_pin_code": shipPincode, "shipping_gst_no": shipGst,
     "opening_balance_cr": openingCr, "opening_balance_dr": openingDr,
     "batch_number": batchNo, "created_by": createdBy,
+    "bank_name": bankName,
+    "bank_address": bankAddress,
+    "account_no": accountNo,
+    "ifsc_code": ifscCode,
   };
 
   factory CustomerEntity.fromJson(Map<String, dynamic> json) => CustomerEntity(
@@ -43,6 +47,10 @@ class CustomerEntity {
     pincode: json['pin_code'] ?? "",
     email: json['email'] ?? "",
     gstNo: json['gst_number'] ?? "",
+    bankName: json['bank_name'] ?? "",
+    bankAddress: json['bank_address'] ?? "",
+    accountNo: json['account_no'] ?? "",
+    ifscCode: json['ifsc_code'] ?? "",
     shipName: json['shipping_name'] ?? "",
     shipAddress: json['shipping_address'] ?? "",
     shipMobile: json['shipping_mobile_no'] ?? "",
@@ -101,9 +109,20 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
         emit(CustomerSuccess("Process Successful!"));
         final data = await repo.fetchCustomers();
         emit(CustomerLoaded(data));
-      } catch (e) { emit(CustomerError(e.toString())); }
-    });
-  }
+      } catch (e) {
+        String errorMsg = "Something went wrong";
+
+        if (e.toString().contains("already exists")) {
+          errorMsg = "Customer with this name already exists!";
+        } else if (e.toString().contains("400")) {
+          errorMsg = "Validation Failed: Customer with this name already exists!.";
+        } else {
+          errorMsg = e.toString();
+        }
+
+        emit(CustomerError(errorMsg));
+      }
+    });  }
 }
 
 // ==========================================================================
@@ -131,6 +150,12 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
   // Accounting
   final _crCtrl = TextEditingController(text: "0");
   final _drCtrl = TextEditingController(text: "0");
+
+  // Bank details
+  final _bankCtrl = TextEditingController();
+  final _bankAddressCtrl = TextEditingController();
+  final _accCtrl = TextEditingController();
+  final _ifscCtrl = TextEditingController();
 
   // Shipping Controllers
   final _sNameCtrl = TextEditingController();
@@ -164,6 +189,10 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
       pincode: _pinCtrl.text.trim(),
       email: _emailCtrl.text.trim(),
       gstNo: _gstCtrl.text.trim(),
+      bankName: _bankCtrl.text.trim(),
+      accountNo: _accCtrl.text.trim(),
+      ifscCode: _ifscCtrl.text.trim(),
+      bankAddress: _bankAddressCtrl.text.trim(),
       shipName: _sNameCtrl.text.isEmpty ? _nameCtrl.text : _sNameCtrl.text,
       shipAddress: _sAddrCtrl.text.isEmpty ? _addrCtrl.text : _sAddrCtrl.text,
       shipMobile: _sMobileCtrl.text.isEmpty ? _mobileCtrl.text : _sMobileCtrl.text,
@@ -186,6 +215,7 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
       _gstCtrl.text = item.gstNo; _crCtrl.text = item.openingCr.toString(); _drCtrl.text = item.openingDr.toString();
       _sNameCtrl.text = item.shipName; _sAddrCtrl.text = item.shipAddress; _sMobileCtrl.text = item.shipMobile;
       _sCityCtrl.text = item.shipCity; _sPinCtrl.text = item.shipPincode; _sGstCtrl.text = item.shipGst;
+      _bankCtrl.text = item.bankName; _accCtrl.text = item.accountNo; _ifscCtrl.text = item.ifscCode;_bankAddressCtrl.text = item.bankAddress;
     });
     Navigator.pop(context);
   }
@@ -193,7 +223,7 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
   void _resetForm() {
     setState(() {
       editingCustomer = null;
-      for (var c in [_nameCtrl, _mobileCtrl, _addrCtrl, _cityCtrl, _pinCtrl, _emailCtrl, _gstCtrl, _sNameCtrl, _sAddrCtrl, _sMobileCtrl, _sCityCtrl, _sPinCtrl, _sGstCtrl]) {
+      for (var c in [_nameCtrl, _mobileCtrl, _addrCtrl, _cityCtrl, _pinCtrl, _emailCtrl, _gstCtrl, _sNameCtrl, _sAddrCtrl, _sMobileCtrl, _sCityCtrl, _sPinCtrl, _sGstCtrl,_bankCtrl,_bankAddressCtrl,_accCtrl,_ifscCtrl]) {
         c.clear();
       }
       _crCtrl.text = "0"; _drCtrl.text = "0";
@@ -206,8 +236,20 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
   Widget build(BuildContext context) {
     return BlocConsumer<CustomerBloc, CustomerState>(
       listener: (context, state) {
-        if (state is CustomerSuccess || state is CustomerError) { if (Navigator.of(context, rootNavigator: true).canPop()) Navigator.of(context, rootNavigator: true).pop(); }
-        if (state is CustomerSuccess) { _showSnackbar(state.message, Colors.green); _resetForm(); }
+        if (state is CustomerSuccess || state is CustomerError) {
+          if (Navigator.of(context, rootNavigator: true).canPop()) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
+        }
+
+        if (state is CustomerSuccess) {
+          _showSnackbar(state.message, Colors.green);
+          _resetForm();
+        }
+
+        if (state is CustomerError) {
+          _showSnackbar(state.error, Colors.redAccent);
+        }
       },
       builder: (context, state) {
         return Scaffold(
@@ -319,10 +361,20 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
         children: [
           _sectionLabel("BILLING INFORMATION"),
           const SizedBox(height: 15),
+
+          // _buildFormCard ke andar jahan Name field hai:
           _responsiveRow(width, [
-            _tf(_nameCtrl, "Customer Name", Icons.person, flex: 2),
+            _tf(
+                _nameCtrl,
+                "Customer Name",
+                Icons.person,
+                flex: 2,
+                readOnly: editingCustomer != null // Edit mode mein Name disable ho jayega
+            ),
             _tf(_mobileCtrl, "Mobile No", Icons.phone_android, isNum: true),
           ]),
+
+
           const SizedBox(height: 15),
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -337,9 +389,40 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
           const SizedBox(height: 15),
           _responsiveRow(width, [
             _tf(_gstCtrl, "GST Number", Icons.receipt),
-            _tf(_crCtrl, "Balance CR", Icons.add_circle, color: Colors.green, isNum: true),
-            _tf(_drCtrl, "Balance DR", Icons.remove_circle, color: Colors.red, isNum: true),
+
+            // Balance CR
+            _tf(_crCtrl, "Balance CR", Icons.add_circle,
+                color: Colors.green,
+                isNum: true,
+                onCh: (v) {
+                  if (v.isNotEmpty && v != "0") {
+                    setState(() { _drCtrl.text = "0"; });
+                  }
+                }
+            ),
+
+            // Balance DR
+            _tf(_drCtrl, "Balance DR", Icons.remove_circle,
+                color: Colors.red,
+                isNum: true,
+                onCh: (v) {
+                  if (v.isNotEmpty && v != "0") {
+                    setState(() { _crCtrl.text = "0"; });
+                  }
+                }
+            ),
           ]),
+          const SizedBox(height: 30),
+          _sectionLabel("BANKING & PAYMENT TERMS"),
+          const SizedBox(height: 15),
+          _responsiveRow(width, [
+            _tf(_bankCtrl, "Bank Name", Icons.account_balance),
+            _tf(_accCtrl, "Account No", Icons.numbers, isNum: true, flex: 2),
+            _tf(_ifscCtrl, "IFSC Code", Icons.code),
+            _tf(_bankAddressCtrl, "Branch & Address Details", Icons.location_on),
+
+          ]),
+
           const SizedBox(height: 30),
           _sectionLabel("SHIPPING INFORMATION"),
           const SizedBox(height: 15),
@@ -372,24 +455,30 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
   }
 
   // --- REPLACED _tf TO HANDLE NUMBERS & FLEX ---
-  Widget _tf(TextEditingController c, String l, IconData i, {int maxLines = 1, Color? color, bool isNum = false, int flex = 1}) {
-    return _FlexWidget(
-      flex: flex,
-      child: TextFormField(
-        controller: c,
-        maxLines: maxLines,
-        style: TextStyle(color: color, fontSize: 13),
-        keyboardType: isNum ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
-        inputFormatters: isNum ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))] : null,
-        decoration: InputDecoration(
-          labelText: l,
-          prefixIcon: Icon(i, size: 19),
-          isDense: true,
-          filled: true,
-          fillColor: Colors.grey.shade50,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          labelStyle: const TextStyle(fontSize: 12),
-        ),
+  Widget _tf(TextEditingController c, String l, IconData i, {
+    int maxLines = 1,
+    Color? color,
+    bool isNum = false,
+    bool readOnly = false,
+    int flex = 1,
+    Function(String)? onCh,
+  }) {
+    return TextFormField(
+      controller: c,
+      maxLines: maxLines,
+      readOnly: readOnly,
+      onChanged: onCh,
+      style: TextStyle(color: color, fontSize: 13),
+      keyboardType: isNum ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+      inputFormatters: isNum ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))] : null,
+      decoration: InputDecoration(
+        labelText: l,
+        prefixIcon: Icon(i, size: 19),
+        isDense: true,
+        filled: true,
+        fillColor: readOnly ? Colors.grey.shade200 : Colors.grey.shade50,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        labelStyle: const TextStyle(fontSize: 12),
       ),
     );
   }
@@ -424,6 +513,8 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
           _infoItem("Billing Address", item.address, Icons.home),
           const SizedBox(height: 10),
           _infoItem("Shipping Address", item.shipAddress, Icons.local_shipping),
+          const SizedBox(height: 10),
+          _infoItem("Bank Address", item.bankAddress, Icons.location_on),
         ])),
         Align(alignment: Alignment.centerRight, child: TextButton.icon(onPressed: () => _onEdit(item), icon: const Icon(Icons.edit, size: 18), label: const Text("EDIT"))),
       ]),
@@ -435,6 +526,8 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
       SizedBox(width: 150, child: _infoItem("Mobile", item.mobile, Icons.phone)),
       SizedBox(width: 150, child: _infoItem("City", item.city, Icons.location_city)),
       SizedBox(width: 150, child: _infoItem("Opening CR", "₹${item.openingCr}", Icons.add_circle, color: Colors.green)),
+      SizedBox(width: 150, child: _infoItem("Bank Name", item.bankName, Icons.location_city, color: Colors.green)),
+      SizedBox(width: 150, child: _infoItem("Acc No", item.accountNo, Icons.location_city, color: Colors.green)),
     ]);
   }
 

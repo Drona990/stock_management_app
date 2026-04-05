@@ -126,7 +126,6 @@ class _MasterReportScreenState extends State<MasterReportScreen> {
     }
   }
 
-  // --- PDF GENERATION (Multi-Platform compatible by default via Printing) ---
   Future<void> _generatePdf() async {
     final pdf = pw.Document();
     final List data = _reportData!['data'];
