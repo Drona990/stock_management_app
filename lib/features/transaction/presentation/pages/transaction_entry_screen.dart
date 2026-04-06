@@ -43,9 +43,9 @@ class SaveInvoiceEvent extends TransactionEvent {
 
 abstract class TransactionState {}
 class TransactionInitial extends TransactionState {}
-class TransactionLoading extends TransactionState {} // State class ko aise update karein
+class TransactionLoading extends TransactionState {}
 class TransactionSuccess extends TransactionState {
-  final Map<String, dynamic> responseData; // Backend se aaya hua data
+  final Map<String, dynamic> responseData;
   TransactionSuccess(this.responseData);
 }
 class TransactionError extends TransactionState {
@@ -60,10 +60,11 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
     on<SaveInvoiceEvent>((event, emit) async {
       emit(TransactionLoading());
       try {
-        // Backend se fresh saved data lo jisme Bill No generate ho chuka hai
         final Map<String, dynamic> savedResponse = await repository.saveTransaction(event.data, event.isSales);
 
-        if (!isClosed) emit(TransactionSuccess(savedResponse)); // Yahan savedResponse jayega
+        print("invoice response: $savedResponse");
+
+        if (!isClosed) emit(TransactionSuccess(savedResponse));
       } catch (e) {
         if (!isClosed) emit(TransactionError(e.toString()));
       }
@@ -78,8 +79,8 @@ class TransactionRowController {
   final hsnCtrl = TextEditingController();
   final qtyCtrl = TextEditingController(text: "0");
   final rateCtrl = TextEditingController(text: "0");
-  final cgstPCtrl = TextEditingController(text: "0");
-  final sgstPCtrl = TextEditingController(text: "0");
+  final cgstPCtrl = TextEditingController(text: "9");
+  final sgstPCtrl = TextEditingController(text: "9");
   final igstPCtrl = TextEditingController(text: "0");
   final lineTotalCtrl = TextEditingController(text: "0.00");
   String? selectedUom;
@@ -149,17 +150,20 @@ class _TransactionTerminalScreenState extends State<TransactionTerminalScreen> {
     var tens = ["", "", "TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY", "EIGHTY", "NINETY"];
 
     if (n < 20) return units[n];
-    if (n < 100) return tens[n ~/ 10] + (n % 10 != 0 ? " " + units[n % 10] : "");
-    if (n < 1000) return units[n ~/ 100] + " HUNDRED" + (n % 100 != 0 ? " AND " + _numToWords(n % 100) : "");
-    if (n < 100000) return _numToWords(n ~/ 1000) + " THOUSAND" + (n % 1000 != 0 ? " " + _numToWords(n % 1000) : "");
-    if (n < 10000000) return _numToWords(n ~/ 100000) + " LAKH" + (n % 100000 != 0 ? " " + _numToWords(n % 100000) : "");
-    return _numToWords(n ~/ 10000000) + " CRORE" + (n % 10000000 != 0 ? " " + _numToWords(n % 10000000) : "");
+    if (n < 100) return tens[n ~/ 10] + (n % 10 != 0 ? " ${units[n % 10]}" : "");
+    if (n < 1000) return "${units[n ~/ 100]} HUNDRED${n % 100 != 0 ? " AND ${_numToWords(n % 100)}" : ""}";
+    if (n < 100000) return "${_numToWords(n ~/ 1000)} THOUSAND${n % 1000 != 0 ? " ${_numToWords(n % 1000)}" : ""}";
+    if (n < 10000000) return "${_numToWords(n ~/ 100000)} LAKH${n % 100000 != 0 ? " ${_numToWords(n % 100000)}" : ""}";
+    return "${_numToWords(n ~/ 10000000)} CRORE${n % 10000000 != 0 ? " ${_numToWords(n % 10000000)}" : ""}";
   }
 
   void _loadMasters() {
     context.read<UomBloc>().add(LoadUoms());
-    if (widget.isSales) context.read<CustomerBloc>().add(LoadCustomers());
-    else context.read<SupplierBloc>().add(LoadSuppliers());
+    if (widget.isSales) {
+      context.read<CustomerBloc>().add(LoadCustomers());
+    } else {
+      context.read<SupplierBloc>().add(LoadSuppliers());
+    }
   }
 
   void _calculateTotals() {
@@ -193,7 +197,7 @@ class _TransactionTerminalScreenState extends State<TransactionTerminalScreen> {
 
       grandTotal = roundedTotal;
 
-      _amtInWordsCtrl.text = _numToWords(grandTotal.toInt()) + " RUPEES ONLY";
+      _amtInWordsCtrl.text = "${_numToWords(grandTotal.toInt())} RUPEES ONLY";
     });
   }
 
@@ -270,29 +274,45 @@ class _TransactionTerminalScreenState extends State<TransactionTerminalScreen> {
     context.read<TransactionBloc>().add(SaveInvoiceEvent(payload, widget.isSales));
   }
 
-// Terminal Screen ke andar ka function
+
+
   Future<void> _generatePdf(Map<String, dynamic> savedData) async {
     try {
-      // 1. Assets se logo load karein
-      final Uint8List logoBytes = (await rootBundle.load('assets/images/logo.png')).buffer.asUint8List();
+      final Uint8List logoBytes = (await rootBundle.load('assets/images/ultra_logo.jpeg')).buffer.asUint8List();
       final pw.ImageProvider logoImage = pw.MemoryImage(logoBytes);
 
-      // 2. Dynamic Service call karein
+      // ✅ Sales ke liye 5 headings, Purchase ke liye sirf 1
+      List<String> copyHeadings = [];
+
+      if (widget.isSales) {
+        copyHeadings = [
+          "ORIGINAL FOR RECIPIENT",
+          "DUPLICATE FOR TRANSPORTER",
+          "TRIPLICATE FOR SUPPLIER",
+          "COPY FOR ACCOUNTS",
+          "EXTRA COPY",
+        ];
+      } else {
+        // ✅ Purchase ke liye sirf ek single page
+        copyHeadings = ["PURCHASE VOUCHER"];
+      }
+
       final pdf = await InvoicePdfService.generate(
         logoImage: logoImage,
-        data: savedData, // Ye backend ka response hai (Serializer.data)
+        data: savedData,
         isSales: widget.isSales,
+        headings: copyHeadings, // Pass the list here
       );
 
-      // 3. Print/Preview
       await Printing.layoutPdf(
         onLayout: (format) async => pdf.save(),
-        name: 'Invoice_${savedData['billno']}.pdf',
+        name: '${widget.isSales ? "Sales" : "Purchase"}_${savedData['billno']}.pdf',
       );
     } catch (e) {
       debugPrint("PDF Generation Error: $e");
     }
   }
+
   @override
   Widget build(BuildContext context) {
     bool isMobile = MediaQuery.of(context).size.width < 800;

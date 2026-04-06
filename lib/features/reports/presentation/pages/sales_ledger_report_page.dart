@@ -2,6 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../bloc/salse_purchase_legder_report_bloc.dart';
+import 'package:flutter/services.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:stock_management/features/transaction/presentation/pages/salse_invoice_pdf_generation.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../injection.dart';
 
 class SalesLedgerReportPage extends StatefulWidget {
   const SalesLedgerReportPage({super.key});
@@ -11,16 +18,65 @@ class SalesLedgerReportPage extends StatefulWidget {
 
 class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
   DateTimeRange? _dateRange;
+  int? _hoveredRowIndex;
+  String _searchQuery = "";
+
+  // --- PDF GENERATION LOGIC ---
+  Future<void> _generatePdf(dynamic ledgerItem) async {
+    bool isLoaderVisible = false;
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          isLoaderVisible = true;
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)));
+        },
+      );
+
+      final response = await sl<ApiClient>().get(
+          '/api/transactions/invoice-print-data/',
+          query: {'inv_no': ledgerItem['invno'], 'type': 'SALES'}
+      );
+
+      if (isLoaderVisible) {
+        Navigator.of(context, rootNavigator: true).pop();
+        isLoaderVisible = false;
+      }
+
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      if (response.data != null && response.data['status'] == 'success') {
+        final Map<String, dynamic> savedData = response.data['data'];
+        final Uint8List logoBytes = (await rootBundle.load('assets/images/ultra_logo.jpeg')).buffer.asUint8List();
+        final pw.ImageProvider logoImage = pw.MemoryImage(logoBytes);
+
+        final pdf = await InvoicePdfService.generate(
+          logoImage: logoImage,
+          data: savedData,
+          isSales: true,
+          headings: ["ORIGINAL FOR RECIPIENT", "DUPLICATE FOR TRANSPORTER", "TRIPLICATE FOR SUPPLIER", "COPY FOR ACCOUNTS", "EXTRA COPY"],
+        );
+
+        await Printing.layoutPdf(
+          onLayout: (format) async => pdf.save(),
+          name: 'Sales_${savedData['billno']}.pdf',
+        );
+      }
+    } catch (e) {
+      if (isLoaderVisible) Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 900;
+    final bool isMobile = MediaQuery.of(context).size.width < 900;
 
     return BlocProvider(
       create: (context) => LedgerBloc(LedgerRepository())..add(LoadLedgerData(type: "Sales")),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC), // Slate background
+        backgroundColor: const Color(0xFFF1F5F9), // Soft slate background
         body: Column(
           children: [
             _buildProfessionalHeader(isMobile),
@@ -31,8 +87,9 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
                   children: [
                     _buildTopStats(isMobile),
                     const SizedBox(height: 24),
-                    // Table Card
-                    Expanded(child: _buildCustomTableCard(isMobile)),
+                    _buildFilterSection(isMobile),
+                    const SizedBox(height: 16),
+                    Expanded(child: _buildTransactionList()),
                   ],
                 ),
               ),
@@ -43,64 +100,58 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
     );
   }
 
-  // --- 1. PROFESSIONAL HEADER ---
+  // --- 1. PREMIUM HEADER ---
   Widget _buildProfessionalHeader(bool isMobile) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
+        color: Color(0xFF0F172A), // Deep navy
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
       ),
       child: Row(
         children: [
-          const Icon(Icons.analytics_outlined, color: Color(0xFF38BDF8), size: 26),
-          const SizedBox(width: 12),
+          const CircleAvatar(
+            backgroundColor: Color(0xFF38BDF8),
+            child: Icon(Icons.receipt_long, color: Colors.white),
+          ),
+          const SizedBox(width: 16),
           const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Sales Ledger",
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              Text("Organization Revenue Audit",
-                  style: TextStyle(color: Colors.white60, fontSize: 10)),
+              Text("Sales Ledger", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+              Text("Real-time Revenue Monitoring", style: TextStyle(color: Colors.white54, fontSize: 11)),
             ],
           ),
           const Spacer(),
-          if (!isMobile) _buildHeaderActions(),
+          if (!isMobile)
+            ElevatedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.file_download_outlined, size: 18),
+              label: const Text("EXPORT CSV"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white10,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildHeaderActions() {
-    return ElevatedButton.icon(
-      onPressed: () {},
-      icon: const Icon(Icons.print_outlined, size: 16),
-      label: const Text("PRINT REPORT"),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF38BDF8),
-        foregroundColor: Colors.black,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
-
-  // --- 2. SUMMARY STATS ---
+  // --- 2. STATS ---
   Widget _buildTopStats(bool isMobile) {
     return BlocBuilder<LedgerBloc, LedgerState>(
       builder: (context, state) {
         final summary = (state is LedgerLoaded) ? state.summary : {};
         return Row(
           children: [
-            _modernStatTile("Total Sales", "₹ ${summary['total_debit'] ?? '0'}", Icons.trending_up, Colors.blue),
+            _modernStatTile("GROSS SALES", "₹${summary['total_debit'] ?? '0'}", Icons.show_chart, Colors.blue),
             const SizedBox(width: 16),
-            _modernStatTile("Receipts Total", "₹ ${summary['total_credit'] ?? '0'}", Icons.account_balance_wallet, Colors.teal),
+            _modernStatTile("TOTAL RECEIPTS", "₹${summary['total_credit'] ?? '0'}", Icons.account_balance, Colors.greenAccent),
             if (!isMobile) ...[
               const SizedBox(width: 16),
-              _modernStatTile("Net Revenue", "₹ ${summary['closing_balance'] ?? '0'}", Icons.pie_chart_outline, Colors.orange),
+              _modernStatTile("NET REVENUE", "₹${summary['closing_balance'] ?? '0'}", Icons.account_balance_wallet, Colors.orange),
             ]
           ],
         );
@@ -111,99 +162,71 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
   Widget _modernStatTile(String title, String val, IconData icon, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade100),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(backgroundColor: color.withOpacity(0.1), radius: 18, child: Icon(icon, color: color, size: 18)),
-            const SizedBox(width: 12),
-            Flexible(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w600)),
-                FittedBox(child: Text(val, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)))),
-              ],
-            )),
+            CircleAvatar(backgroundColor: color.withOpacity(0.1), radius: 16, child: Icon(icon, color: color, size: 16)),
+            const SizedBox(height: 12),
+            Text(title, style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
+            const SizedBox(height: 4),
+            Text(val, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
           ],
         ),
       ),
     );
   }
 
-  // --- 3. CUSTOM SCROLLABLE TABLE (CRITICAL FIX FOR OVERFLOW) ---
-  Widget _buildCustomTableCard(bool isMobile) {
+  // --- 3. FILTER SECTION ---
+  Widget _buildFilterSection(bool isMobile) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 20)],
-      ),
-      child: Column(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      child: Row(
         children: [
-          _buildTableFilterBar(isMobile),
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal, // Horizontal Scroll Enabled
-              physics: const BouncingScrollPhysics(),
-              child: SizedBox(
-                width: 1350, // Total fixed width for all columns combined
-                child: Column(
-                  children: [
-                    _buildTableStickyHeader(),
-                    const Divider(height: 1, thickness: 1),
-                    Expanded(child: _buildTableRows()),
-                  ],
-                ),
+            child: TextField(
+              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()), // Frontend Filter Trigger
+              decoration: InputDecoration(
+                hintText: "Filter by Invoice # or Customer Name...",
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                prefixIcon: const Icon(Icons.search, color: Color(0xFF38BDF8)),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
           ),
+          const VerticalDivider(width: 20),
+          _dateFilterButton(),
         ],
       ),
     );
   }
 
-  Widget _buildTableStickyHeader() {
-    return Container(
-      color: const Color(0xFFF8FAFC),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
-      child: Row(
-        children: [
-          _headerCell("TR. NO", 100),
-          _headerCell("TR. DATE", 120),
-          _headerCell("BILL DETAILS", 250),
-          _headerCell("CUSTOMER INFO", 300),
-          _headerCell("GSTIN", 180),
-          _headerCell("DEBIT (DR)", 150),
-          _headerCell("CREDIT (CR)", 150),
-        ],
-      ),
-    );
-  }
-
-  Widget _headerCell(String label, double width) => SizedBox(
-    width: width,
-    child: Text(label, style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.5)),
-  );
-
-  Widget _buildTableRows() {
+  // --- 4. TRANSACTION LIST WITH FRONTEND FILTERING ---
+  Widget _buildTransactionList() {
     return BlocBuilder<LedgerBloc, LedgerState>(
       builder: (context, state) {
-        if (state is LedgerLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)));
+        if (state is LedgerLoading) return const Center(child: CircularProgressIndicator());
         if (state is LedgerLoaded) {
-          if (state.data.isEmpty) return const Center(child: Text("No records found"));
-          return ListView.separated(
-            padding: EdgeInsets.zero,
-            itemCount: state.data.length,
-            separatorBuilder: (_, __) => const Divider(height: 1, indent: 24, endIndent: 24),
-            itemBuilder: (context, index) {
-              return _buildDataRow(state.data[index]);
-            },
+          // Frontend Filtering Logic
+          final filteredData = state.data.where((item) {
+            final name = item['inname']?.toString().toLowerCase() ?? "";
+            final invNo = item['invno']?.toString().toLowerCase() ?? "";
+            return name.contains(_searchQuery) || invNo.contains(_searchQuery);
+          }).toList();
+
+          if (filteredData.isEmpty) return const Center(child: Text("No records match your search"));
+
+          return ListView.builder(
+            itemCount: filteredData.length,
+            physics: const BouncingScrollPhysics(),
+            itemBuilder: (context, index) => _buildTransactionCard(filteredData[index], index),
           );
         }
         return const Center(child: Text("Error loading data"));
@@ -211,62 +234,82 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
     );
   }
 
-  Widget _buildDataRow(dynamic item) {
-    bool isLive = item['delflag'] == ' ';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-      child: Row(
-        children: [
-          SizedBox(width: 100, child: Text("#${item['tranno']}", style: const TextStyle(fontSize: 12, color: Colors.grey))),
-          SizedBox(width: 120, child: Text(item['trdate'] ?? "", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+  Widget _buildTransactionCard(dynamic item, int index) {
+    bool isHovered = _hoveredRowIndex == index;
 
-          // BILL DETAILS
-          SizedBox(width: 250, child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredRowIndex = index),
+      onExit: (_) => setState(() => _hoveredRowIndex = null),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isHovered ? const Color(0xFF38BDF8) : Colors.transparent, width: 1.5),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(isHovered ? 0.08 : 0.02), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
             children: [
-              Text(item['invno'] ?? "", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
-              Text("Inv Date: ${item['invdate']}", style: const TextStyle(color: Colors.grey, fontSize: 10)),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.receipt, color: Color(0xFF475569), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item['invno'] ?? "N/A", style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                      Text("Bill Date: ${item['invdate']}", style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+                    ],
+                  ),
+                  const Spacer(),
+                  // Hover Action
+                  if (isHovered)
+                    IconButton(
+                      icon: const Icon(Icons.file_open, color: Colors.redAccent, size: 20),
+                      onPressed: () => _generatePdf(item),
+                      tooltip: "View PDF",
+                    ),
+                ],
+              ),
+              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("CONSIGNEE", style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                        const SizedBox(height: 4),
+                        Text(item['inname']?.toString().toUpperCase() ?? "N/A", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF334155))),
+                      ],
+                    ),
+                  ),
+                  _amountCol("DEBIT", "₹${item['trdr']}", const Color(0xFF2563EB)),
+                  _amountCol("CREDIT", "₹${item['trcr']}", const Color(0xFFDC2626)),
+                ],
+              ),
             ],
-          )),
-
-          // CUSTOMER INFO
-          SizedBox(width: 300, child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item['inname']?.toString().toUpperCase() ?? "", style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-              Text(item['inaddress'] ?? "No Address", maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.blueGrey, fontSize: 10)),
-            ],
-          )),
-
-          SizedBox(width: 180, child: Text(item['invgst'] ?? "-", style: const TextStyle(fontSize: 12, color: Colors.blueGrey))),
-          SizedBox(width: 150, child: Text("₹ ${item['trdr']}", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w700))),
-          SizedBox(width: 150, child: Text("₹ ${item['trcr']}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700))),
-        ],
+          ),
+        ),
       ),
     );
   }
 
-
-  Widget _buildTableFilterBar(bool isMobile) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
-              child: TextField(
-                onChanged: (v) => context.read<LedgerBloc>().add(LoadLedgerData(search: v)),
-                decoration: const InputDecoration(hintText: "Search Customer or Bill No...", icon: Icon(Icons.search, size: 18), border: InputBorder.none),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          _dateFilterButton(),
-        ],
-      ),
+  Widget _amountCol(String label, String val, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
+        Text(val, style: TextStyle(fontWeight: FontWeight.w900, color: color, fontSize: 16)),
+      ],
     );
   }
 
@@ -276,18 +319,22 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
         final picked = await showDateRangePicker(context: context, firstDate: DateTime(2000), lastDate: DateTime(2101));
         if (picked != null) {
           setState(() => _dateRange = picked);
-          context.read<LedgerBloc>().add(LoadLedgerData(fromDate: DateFormat('yyyy-MM-dd').format(picked.start), toDate: DateFormat('yyyy-MM-dd').format(picked.end)));
+          context.read<LedgerBloc>().add(LoadLedgerData(
+            fromDate: DateFormat('yyyy-MM-dd').format(picked.start),
+            toDate: DateFormat('yyyy-MM-dd').format(picked.end),
+          ));
         }
       },
       child: Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(8)),
-        child: Row(children: [
-          const Icon(Icons.calendar_today_outlined, size: 14, color: Colors.blueGrey),
-          const SizedBox(width: 8),
-          Text(_dateRange == null ? "Period" : DateFormat('dd MMM').format(_dateRange!.start), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-        ]),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(color: const Color(0xFF38BDF8).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+        child: Row(
+          children: [
+            const Icon(Icons.date_range, size: 16, color: Color(0xFF0284C7)),
+            const SizedBox(width: 8),
+            Text(_dateRange == null ? "Date Filter" : DateFormat('dd MMM').format(_dateRange!.start), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0284C7))),
+          ],
+        ),
       ),
     );
   }
