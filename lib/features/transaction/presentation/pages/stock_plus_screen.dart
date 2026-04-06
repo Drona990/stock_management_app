@@ -231,6 +231,7 @@ class LabelPrintingService1 {
   }
 }
 
+/*
 class LabelPrintingService {
   static Future<void> generateAndPrintLabels(Map<String, dynamic> data) async {
     final pdf = pw.Document();
@@ -312,6 +313,106 @@ class LabelPrintingService {
     }
   }
 }
+*/
+
+
+
+class LabelPrintingService {
+  static Future<void> generateAndPrintLabels(Map<String, dynamic> data) async {
+    final pdf = pw.Document();
+
+    final List barcodes = data['barcode_list'] ?? [];
+    final String subGroupName = (data['sub_group_name'] ?? "ITEM").toString().toUpperCase();
+    final String price = (data['price_with_gst']?.toString() ?? "0").split('.')[0];
+    final shop = data['shop_details'] ?? {};
+
+    if (barcodes.isEmpty) return;
+
+    // --- CRASH FIX: 10 Labels per page (5 Rows) ---
+    // Hum labels ko chote chunks mein divide karenge taaki memory crash na ho
+    for (int i = 0; i < barcodes.length; i += 10) {
+      final end = (i + 10 < barcodes.length) ? i + 10 : barcodes.length;
+      final batch = barcodes.sublist(i, end);
+
+      pdf.addPage(
+        pw.Page(
+          // Page size 100mm width, 200mm height (5 rows of 40mm each)
+          pageFormat: const PdfPageFormat(
+            100 * PdfPageFormat.mm,
+            200 * PdfPageFormat.mm,
+            marginAll: 0,
+          ),
+          build: (pw.Context context) {
+            return pw.Wrap(
+              children: batch.map((code) {
+                return pw.Container(
+                  width: 50 * PdfPageFormat.mm,
+                  height: 40 * PdfPageFormat.mm,
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    mainAxisAlignment: pw.MainAxisAlignment.center,
+                    children: [
+                      pw.Text(shop['name']?.toUpperCase() ?? "BRAND BANK",
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                      pw.Divider(thickness: 0.3, height: 3),
+
+                      pw.Text("DISCOUNT PRICE",
+                          style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold)),
+                      pw.Text("Rs. $price /-",
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+
+                      pw.Divider(thickness: 0.3, height: 3),
+
+                      pw.Text(subGroupName,
+                          textAlign: pw.TextAlign.center,
+                          maxLines: 1,
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+
+                      pw.SizedBox(height: 1),
+                      pw.BarcodeWidget(
+                        barcode: pw.Barcode.code128(),
+                        data: code.toString(),
+                        height: 14,
+                        width: 42 * PdfPageFormat.mm,
+                        drawText: true,
+                        textStyle: pw.TextStyle(fontSize: 4),
+                      ),
+
+                      pw.SizedBox(height: 1),
+                      pw.Text("NO EXCHANGE / NO RETURN",
+                          style: pw.TextStyle(fontSize: 4, fontWeight: pw.FontWeight.bold)),
+                      pw.Divider(thickness: 0.2, height: 2),
+
+                      pw.Text(
+                        "Packed by: ${shop['address'] ?? 'Bengaluru'}",
+                        textAlign: pw.TextAlign.center,
+                        maxLines: 1,
+                        style: pw.TextStyle(fontSize: 3.5, fontWeight: pw.FontWeight.bold),
+                      ),
+                      pw.Text("Care: ${shop['mobile'] ?? '7902909808'}",
+                          style: pw.TextStyle(fontSize: 3, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+      );
+    }
+
+    try {
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'Labels_Batch_Print',
+      );
+    } catch (e) {
+      debugPrint("Print Error: $e");
+    }
+  }
+}
+
 
 
 // ==========================================================================
