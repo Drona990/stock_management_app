@@ -8,6 +8,8 @@ import 'package:stock_management/features/inventory/presentation/bloc/item_locat
 import '../../../../core/network/api_client.dart';
 import '../../../../injection.dart';
 import '../../../inventory/presentation/bloc/inventory_group_subgroup_bloc.dart';
+import 'dart:math' as math;
+
 
 // ==========================================================================
 // 1. DATA LAYER (Models & Repository)
@@ -184,140 +186,9 @@ class StockEntryBloc extends Bloc<StockEntryEvent, StockEntryState> {
 // 3. PRINT SERVICE
 // ==========================================================================
 
+
+
 class LabelPrintingService1 {
-  static Future<void> generateAndPrintLabels(Map<String, dynamic> data) async {
-    final pdf = pw.Document();
-    final List barcodes = data['barcode_list'] ?? [];
-    final shop = data['shop_details'] ?? {};
-    final String subGroupName = data['sub_group_name'] ?? "ITEM";
-    final String price = data['price_with_gst']?.toString() ?? "0.00";
-
-    for (var code in barcodes) {
-      pdf.addPage(
-        pw.Page(
-          pageFormat: const PdfPageFormat(50 * PdfPageFormat.mm, 25 * PdfPageFormat.mm, marginAll: 1 * PdfPageFormat.mm),
-          build: (pw.Context context) {
-            return pw.Container(
-              decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.5)),
-              child: pw.Column(
-                mainAxisAlignment: pw.MainAxisAlignment.center,
-                children: [
-                  pw.Text(shop['name']?.toString().toUpperCase() ?? "SHOP NAME",
-                      style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
-                  pw.Text("${shop['address']} | ${shop['mobile']}",
-                      style: const pw.TextStyle(fontSize: 4.5)),
-                  pw.Divider(thickness: 0.5),
-                  pw.Text(subGroupName.toUpperCase(),
-                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                  pw.SizedBox(height: 1),
-                  pw.BarcodeWidget(
-                    barcode: pw.Barcode.code128(),
-                    data: code.toString(),
-                    width: 90,
-                    height: 25,
-                    drawText: true,
-                  ),
-                  pw.SizedBox(height: 1),
-                  pw.Text("PRICE: RS. $price",
-                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-            );
-          },
-        ),
-      );
-    }
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save(), name: 'Labels');
-  }
-}
-
-/*
-class LabelPrintingService {
-  static Future<void> generateAndPrintLabels(Map<String, dynamic> data) async {
-    final pdf = pw.Document();
-
-    final List barcodes = data['barcode_list'] ?? [];
-    final String subGroupName = (data['sub_group_name'] ?? "ITEM").toString().toUpperCase();
-    final String price = (data['price_with_gst']?.toString() ?? "0").split('.')[0];
-    final shop = data['shop_details'] ?? {};
-
-
-    if (barcodes.isEmpty) return;
-
-    for (var code in barcodes) {
-      pdf.addPage(
-        pw.Page(
-          pageFormat: const PdfPageFormat(
-            30 * PdfPageFormat.mm,
-            50 * PdfPageFormat.mm,
-            marginAll: 1.2 * PdfPageFormat.mm,
-          ),
-          build: (context) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
-            children: [
-              pw.Text(shop['name']?.toUpperCase(),
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-              pw.Text("Premium Stock",
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5)),
-              pw.Divider(thickness: 0.5),
-              pw.Text("DISCOUNT PRICE",
-                  style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-              pw.Text("$price /-",
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 15)),
-
-              pw.Divider(thickness: 0.5),
-              pw.Text(subGroupName,
-                  textAlign: pw.TextAlign.center,
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-              pw.Center(
-                child: pw.BarcodeWidget(
-                  barcode: pw.Barcode.code128(),
-                  data: code.toString(),
-                  height: 20,
-                  width: 26 * PdfPageFormat.mm,
-                  drawText: true,
-                  textStyle: pw.TextStyle(fontSize: 5),
-                ),
-              ),
-              pw.Text("NO EXCHANGE / NO RETURN",
-                  style: pw.TextStyle(fontSize: 4.5, fontWeight: pw.FontWeight.bold)),
-              pw.Divider(thickness: 0.3, height: 3),
-
-              pw.Text(
-                "Packed by: ${shop['address']}",
-                textAlign: pw.TextAlign.center,
-                style: pw.TextStyle(fontSize: 4, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.Text("Care: ${shop['mobile']}",
-                  style: pw.TextStyle(fontSize: 3.5, fontWeight: pw.FontWeight.bold)),
-            ],
-          ),
-        ),
-      );
-    }
-
-    try {
-      if (kIsWeb) {
-        await Printing.layoutPdf(
-          onLayout: (PdfPageFormat format) async => pdf.save(),
-          name: 'Labels_${subGroupName}_${DateTime.now().millisecond}',
-        );
-      } else {
-        await Printing.layoutPdf(
-          onLayout: (PdfPageFormat format) async => pdf.save(),
-          name: 'Inventory_Labels',
-        );
-      }
-    } catch (e) {
-      debugPrint("Printing Error: $e");
-    }
-  }
-}
-*/
-
-
-
-class LabelPrintingService {
   static Future<void> generateAndPrintLabels(Map<String, dynamic> data) async {
     final pdf = pw.Document();
 
@@ -414,6 +285,107 @@ class LabelPrintingService {
 }
 
 
+class LabelPrintingService {
+  static Future<void> generateAndPrintLabels(Map<String, dynamic> data) async {
+    final pdf = pw.Document();
+
+    final List barcodes = data['barcode_list'] ?? [];
+    final String subGroupName = (data['sub_group_name'] ?? "ITEM").toString().toUpperCase();
+    final String price = (data['price_with_gst']?.toString() ?? "0").split('.')[0];
+    final shop = data['shop_details'] ?? {};
+
+    if (barcodes.isEmpty) return;
+
+    // --- LOGIC: Ek page par fix 1 ROW (2 Labels) ---
+    // Isse crash kabhi nahi hoga aur alignment exact 50mm + 50mm rahegi
+    for (int i = 0; i < barcodes.length; i += 2) {
+      final end = (i + 2 < barcodes.length) ? i + 2 : barcodes.length;
+      final batch = barcodes.sublist(i, end);
+
+      pdf.addPage(
+        pw.Page(
+          // Total Width 100mm, Height 40mm (Aapki image ke hisaab se)
+          pageFormat: const PdfPageFormat(
+            100 * PdfPageFormat.mm,
+            40 * PdfPageFormat.mm,
+            marginAll: 0,
+          ),
+          build: (pw.Context context) {
+            return pw.Row( // Row force karega ki side-by-side hi aayein
+              children: [
+                // PEHLA LABEL (Left)
+                pw.Container(
+                  width: 50 * PdfPageFormat.mm,
+                  height: 40 * PdfPageFormat.mm,
+                  padding: const pw.EdgeInsets.all(4),
+                  child: _buildLabelContent(batch[0], shop, subGroupName, price),
+                ),
+
+                // DUSRA LABEL (Right) - Agar list mein hai toh
+                if (batch.length > 1)
+                  pw.Container(
+                    width: 50 * PdfPageFormat.mm,
+                    height: 40 * PdfPageFormat.mm,
+                    padding: const pw.EdgeInsets.all(4),
+                    child: _buildLabelContent(batch[1], shop, subGroupName, price),
+                  ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    try {
+      await Printing.layoutPdf(
+        onLayout: (format) async => pdf.save(),
+        name: 'Label_100x40_2UP',
+      );
+    } catch (e) {
+      debugPrint("Print Error: $e");
+    }
+  }
+
+  // Helper Function: Jo ekdum Image_2.png jaisa design banayega
+  static pw.Widget _buildLabelContent(String code, Map shop, String item, String price) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.center,
+      mainAxisAlignment: pw.MainAxisAlignment.center,
+      children: [
+        pw.Text(shop['name']?.toUpperCase() ?? "BRAND BANK",
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+        pw.Text("Premium Stock", style: const pw.TextStyle(fontSize: 5)),
+
+        pw.Divider(thickness: 0.5, height: 4),
+
+        pw.Text("DISCOUNT PRICE", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold)),
+        pw.Text("$price /-", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+
+        pw.Divider(thickness: 0.5, height: 4),
+
+        pw.Text(item, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), maxLines: 1),
+
+        pw.SizedBox(height: 1),
+        pw.BarcodeWidget(
+          barcode: pw.Barcode.code128(),
+          data: code,
+          height: 12,
+          width: 44 * PdfPageFormat.mm,
+          drawText: true,
+          textStyle: pw.TextStyle(fontSize: 5),
+        ),
+
+        pw.SizedBox(height: 1),
+        pw.Text("NO EXCHANGE / NO RETURN", style: pw.TextStyle(fontSize: 4, fontWeight: pw.FontWeight.bold)),
+
+        pw.Divider(thickness: 0.3, height: 3),
+
+        pw.Text("Packed by: ${shop['address']}", style: pw.TextStyle(fontSize: 3.5), maxLines: 1),
+        pw.Text("Care: ${shop['mobile']}", style: pw.TextStyle(fontSize: 3.5)),
+      ],
+    );
+  }
+}
 
 // ==========================================================================
 // 4. UI LAYER
