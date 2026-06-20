@@ -1,364 +1,3 @@
-/*
-import 'package:dropdown_search/dropdown_search.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
-import '../../../../core/network/api_client.dart';
-import '../../../../injection.dart';
-import '../../../masters/presentation/pages/ledger_entry_screen.dart';
-
-// ==========================================================================
-// 1. DATA LAYER (Repository)
-// ==========================================================================
-class JournalRepository {
-  final ApiClient apiClient = sl<ApiClient>();
-
-  Future<void> saveJournal(Map<String, dynamic> data) async {
-    await apiClient.post('/api/transactions/journal/', data: data);
-  }
-}
-
-// ==========================================================================
-// 2. BLOC LAYER
-// ==========================================================================
-abstract class JournalEvent {}
-class SaveJournalEvent extends JournalEvent { final Map<String, dynamic> data; SaveJournalEvent(this.data); }
-
-abstract class JournalState {}
-class JournalInitial extends JournalState {}
-class JournalLoading extends JournalState {}
-class JournalSuccess extends JournalState { final String message; JournalSuccess(this.message); }
-class JournalError extends JournalState { final String error; JournalError(this.error); }
-
-class JournalBloc extends Bloc<JournalEvent, JournalState> {
-  final JournalRepository repo;
-  JournalBloc(this.repo) : super(JournalInitial()) {
-    on<SaveJournalEvent>((event, emit) async {
-      emit(JournalLoading());
-      try {
-        await repo.saveJournal(event.data);
-        emit(JournalSuccess("Journal Voucher Saved Successfully!"));
-      } catch (e) {
-        emit(JournalError(e.toString()));
-      }
-    });
-  }
-}
-
-// ==========================================================================
-// 3. UI LAYER (Presentation - Single Line Entry)
-// ==========================================================================
-class JournalEntryPage extends StatefulWidget {
-  const JournalEntryPage({super.key});
-
-  @override
-  State<JournalEntryPage> createState() => _JournalEntryPageState();
-}
-
-class _JournalEntryPageState extends State<JournalEntryPage> {
-  final _narration = TextEditingController();
-  final DateTime _fixedDate = DateTime.now();
-
-  // ✅ Each row represents one complete DR/CR transaction
-  List<Map<String, dynamic>> rows = [
-    {
-      "dr_ledger": null,
-      "cr_ledger": null,
-      "amount_ctrl": TextEditingController(text: ""),
-    },
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<LedgerMasterBloc>().add(LoadData());
-  }
-
-  void _addRow() {
-    setState(() {
-      rows.add({
-        "dr_ledger": null,
-        "cr_ledger": null,
-        "amount_ctrl": TextEditingController(text: ""),
-      });
-    });
-  }
-
-  void _removeRow(int index) {
-    if (rows.length > 1) {
-      setState(() => rows.removeAt(index));
-    }
-  }
-
-  void _resetForm() {
-    setState(() {
-      _narration.clear();
-      rows = [{
-        "dr_ledger": null,
-        "cr_ledger": null,
-        "amount_ctrl": TextEditingController(text: ""),
-      }];
-    });
-  }
-
-  void _onSave() {
-    List<Map<String, dynamic>> items = [];
-    for (var row in rows) {
-      double amt = double.tryParse(row['amount_ctrl'].text) ?? 0;
-      if (amt <= 0 || row['dr_ledger'] == null || row['cr_ledger'] == null) continue;
-
-      items.add({"ledger": row['dr_ledger']['id'], "amount": amt, "type": "DEBIT"});
-      items.add({"ledger": row['cr_ledger']['id'], "amount": amt, "type": "CREDIT"});
-    }
-
-    if (items.isEmpty) {
-      _snack("Please complete at least one entry with amount!", Colors.red);
-      return;
-    }
-
-    context.read<JournalBloc>().add(SaveJournalEvent({
-      "date": DateFormat('yyyy-MM-dd').format(_fixedDate),
-      "narration": _narration.text,
-      "items": items,
-    }));
-  }
-
-  void _snack(String m, Color c) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocListener<JournalBloc, JournalState>(
-      listener: (context, state) {
-        if (state is JournalLoading) {
-          showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
-        } else if (state is JournalSuccess) {
-          Navigator.pop(context);
-          _snack(state.message, Colors.green);
-          _resetForm();
-        } else if (state is JournalError) {
-          Navigator.pop(context);
-          _snack(state.error, Colors.red);
-        }
-      },
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF1F3F6),
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          title: const Text("JOURNAL VOUCHER", style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 10),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.only(top: 10),
-                  itemCount: rows.length,
-                  itemBuilder: (context, index) => _buildSingleLineRow(index),
-                ),
-              ),
-              _buildBottomBar(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text("DATE", style: TextStyle(fontSize: 10, color: Colors.grey)),
-              Text(DateFormat('dd-MMM-yyyy').format(_fixedDate), style: const TextStyle(fontWeight: FontWeight.bold)),
-            ]),
-            const SizedBox(width: 20),
-            Expanded(child: TextField(
-              controller: _narration,
-              decoration: const InputDecoration(labelText: "NARRATION / REMARKS", border: OutlineInputBorder(), isDense: true),
-            )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSingleLineRow(int index) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ✅ Entry Heading Badge
-        Container(
-          margin: const EdgeInsets.only(left: 5, bottom: 5),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: const Color(0xFF1A237E), borderRadius: BorderRadius.circular(4)),
-          child: Text("ENTRY #${index + 1}", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-        ),
-        Card(
-          margin: const EdgeInsets.only(bottom: 25), // ✅ Gap between cards
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: Colors.grey.shade300, width: 1), // ✅ Fixed BorderSide Error
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(15.0),
-            child: Column(
-              children: [
-                _rowLedger(index, "DR", "Debit (To) / Receiver", const Color(0xFF1A237E), true),
-                const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Icon(Icons.arrow_downward, size: 16, color: Colors.grey)),
-                _rowLedger(index, "CR", "Credit (By) / Giver", Colors.orange, false),
-                const Divider(height: 30),
-                Row(
-                  children: [
-                    const Text("AMOUNT: ", style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 10),
-                    Expanded(child: TextField(
-                      controller: rows[index]['amount_ctrl'],
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                      textAlign: TextAlign.right,
-                      decoration: const InputDecoration(hintText: "0.00", prefixText: "₹ ", border: OutlineInputBorder(), isDense: true),
-                      onChanged: (v) => setState(() {}),
-                    )),
-                    const SizedBox(width: 10),
-                    IconButton(onPressed: () => _removeRow(index), icon: const Icon(Icons.delete_sweep, color: Colors.red)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _rowLedger(int index, String label, String hint, Color color, bool isDebit) {
-    return Row(
-      children: [
-        CircleAvatar(radius: 12, backgroundColor: color, child: Text(label, style: const TextStyle(fontSize: 9, color: Colors.white))),
-        const SizedBox(width: 10),
-        Expanded(
-          child: BlocBuilder<LedgerMasterBloc, LedgerState>(builder: (context, state) {
-            List ledgers = state is LLoaded ? state.data : [];
-            return DropdownSearch<dynamic>(
-              items: (f, l) => ledgers,
-              itemAsString: (item) => item['name'].toString(),
-              compareFn: (i, s) => i['id'] == s['id'],
-              onChanged: (v) => setState(() => isDebit ? rows[index]['dr_ledger'] = v : rows[index]['cr_ledger'] = v),
-              decoratorProps: DropDownDecoratorProps(
-                decoration: InputDecoration(
-                  hintText: hint,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  filled: true,
-                  fillColor: isDebit ? Colors.blue.shade50 : Colors.orange.shade50,
-                ),
-              ),
-              popupProps: const PopupProps.menu(showSearchBox: true),
-            );
-          }),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBottomBar() {
-    double total = 0;
-    for (var r in rows) {
-      total += double.tryParse(r['amount_ctrl'].text) ?? 0;
-    }
-
-    // LayoutBuilder se hum screen ki width check kar sakte hain
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        bool isMobile = constraints.maxWidth < 600;
-
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
-          ),
-          child: isMobile
-              ? Column( // ✅ Mobile ke liye upar-niche (Vertical)
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _totalSection(total),
-              const Divider(height: 20),
-              _buttonSection(isFullWidth: true),
-            ],
-          )
-              : Row( // ✅ Desktop/Tablet ke liye side-by-side (Horizontal)
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _totalSection(total),
-              _buttonSection(isFullWidth: false),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-// 1. Total Amount Section
-  Widget _totalSection(double total) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("NET TRANSACTION TOTAL", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-        Text(
-          "₹ ${total.toStringAsFixed(2)}",
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey),
-        ),
-      ],
-    );
-  }
-
-// 2. Buttons Section
-  Widget _buttonSection({required bool isFullWidth}) {
-    return Wrap( // ✅ Wrap use karne se overflow nahi hota
-      spacing: 10, // Buttons ke beech gap
-      runSpacing: 10, // Agar niche shift ho toh gap
-      alignment: WrapAlignment.end,
-      children: [
-        SizedBox(
-          width: isFullWidth ? double.infinity : null,
-          child: OutlinedButton.icon(
-            onPressed: _addRow,
-            icon: const Icon(Icons.add),
-            label: const Text("ADD ANOTHER ENTRY"),
-            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20)),
-          ),
-        ),
-        SizedBox(
-          width: isFullWidth ? double.infinity : null,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: _onSave,
-            child: const Text("SAVE VOUCHER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ),
-      ],
-    );
-  }
-
-}*/
-
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -412,7 +51,7 @@ class JournalBloc extends Bloc<JournalEvent, JournalState> {
 }
 
 // ==========================================================================
-// 3. UI LAYER (Presentation)
+// 3. UI LAYER (Presentation High Density Re-engineered Canvas)
 // ==========================================================================
 class JournalEntryPage extends StatefulWidget {
   const JournalEntryPage({super.key});
@@ -436,8 +75,9 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
   @override
   void initState() {
     super.initState();
-    // Load ledgers for the dropdown
-    context.read<LedgerMasterBloc>().add(LoadData());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<LedgerMasterBloc>().add(LoadData());
+    });
   }
 
   @override
@@ -501,10 +141,12 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
   }
 
   void _snack(String m, Color c) => ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(m), backgroundColor: c, behavior: SnackBarBehavior.floating));
+      SnackBar(content: Text(m, style: const TextStyle(fontSize: 11)), backgroundColor: c, behavior: SnackBarBehavior.floating));
 
   @override
   Widget build(BuildContext context) {
+    const Color industrialSlate = Color(0xFF1E293B);
+
     return BlocListener<JournalBloc, JournalState>(
       listener: (context, state) {
         if (state is JournalLoading) {
@@ -512,34 +154,44 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
           showDialog(
             context: context,
             barrierDismissible: false,
-            builder: (dialogCtx) => const Center(child: CircularProgressIndicator(color: Colors.black)),
+            builder: (dialogCtx) => const Center(child: CircularProgressIndicator(color: Color(0xFF00BCD4), strokeWidth: 1.5)),
           );
         } else if (state is JournalSuccess) {
           dev.log("✅ UI: Success State Received");
-          Navigator.of(context, rootNavigator: true).pop(); // Safe Pop for Dialog
+          Navigator.of(context, rootNavigator: true).pop();
           _snack(state.message, Colors.green);
           _resetForm();
         } else if (state is JournalError) {
           dev.log("⚠️ UI: Error State Received: ${state.error}");
-          Navigator.of(context, rootNavigator: true).pop(); // Safe Pop for Dialog
+          Navigator.of(context, rootNavigator: true).pop();
           _snack(state.error, Colors.red);
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF1F3F6),
+        backgroundColor: const Color(0xFFF8FAFB),
         appBar: AppBar(
-          backgroundColor: Colors.black,
-          title: const Text("NEW JOURNAL VOUCHER", style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
+          elevation: 0,
+          backgroundColor: Colors.white,
+          toolbarHeight: 50,
+          iconTheme: const IconThemeData(color: industrialSlate, size: 18),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("NEW JOURNAL VOUCHER", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: industrialSlate, letterSpacing: 0.3)),
+              Text("DOUBLE ENTRY FINANCIAL ADJUSTMENT INTERCEPTOR JOURNAL", style: TextStyle(color: Colors.grey.shade500, fontSize: 8, fontWeight: FontWeight.bold))
+            ],
+          ),
+          shape: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
         ),
         body: Padding(
-          padding: const EdgeInsets.all(12.0),
+          padding: const EdgeInsets.all(10.0),
           child: Column(
             children: [
               _buildHeader(),
               const SizedBox(height: 10),
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.only(top: 10),
+                  padding: EdgeInsets.zero,
                   itemCount: rows.length,
                   itemBuilder: (context, index) => _buildSingleLineRow(index),
                 ),
@@ -553,24 +205,34 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
   }
 
   Widget _buildHeader() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text("DATE", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-              Text(DateFormat('dd-MMM-yyyy').format(_fixedDate), style: const TextStyle(fontWeight: FontWeight.bold)),
-            ]),
-            const SizedBox(width: 20),
-            Expanded(child: TextField(
-              controller: _narration,
-              decoration: const InputDecoration(labelText: "VOUCHER NARRATION", border: OutlineInputBorder(), isDense: true),
-            )),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade200)),
+      child: Row(
+        children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text("VOUCHER DATE", style: TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+            const SizedBox(height: 4),
+            Text(DateFormat('dd-MMM-yyyy').format(_fixedDate).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF1E293B))),
+          ]),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Container(
+              height: 36,
+              child: TextField(
+                controller: _narration,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                decoration: const InputDecoration(
+                    labelText: "VOUCHER NARRATION EXPLANATION DESCRIPTION",
+                    labelStyle: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10)
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -580,40 +242,47 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          margin: const EdgeInsets.only(left: 5, bottom: 5),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: const Color(0xFF1A237E), borderRadius: BorderRadius.circular(4)),
-          child: Text("ENTRY #${index + 1}", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+          margin: const EdgeInsets.only(left: 4, bottom: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(2)),
+          child: Text("ENTRY TRANSACTION DIRECTORY #${index + 1}", style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
         ),
-        Card(
-          margin: const EdgeInsets.only(bottom: 25),
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: Colors.grey.shade300, width: 1),
-          ),
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade200)),
           child: Padding(
-            padding: const EdgeInsets.all(15.0),
+            padding: const EdgeInsets.all(12.0),
             child: Column(
               children: [
-                _ledgerDropdown(index, true), // DEBIT Side
-                const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Icon(Icons.arrow_downward, size: 16, color: Colors.grey)),
-                _ledgerDropdown(index, false), // CREDIT Side
-                const Divider(height: 30),
+                _ledgerDropdown(index, true),
+                const Padding(padding: EdgeInsets.symmetric(vertical: 4), child: Icon(Icons.arrow_downward_rounded, size: 14, color: Colors.grey)),
+                _ledgerDropdown(index, false),
+                const Divider(height: 16),
                 Row(
                   children: [
-                    const Text("AMOUNT: ", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text("TRANSACTION VALUE AMOUNT:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.blueGrey)),
                     const SizedBox(width: 10),
-                    Expanded(child: TextField(
-                      controller: rows[index]['amount_ctrl'],
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                      textAlign: TextAlign.right,
-                      decoration: const InputDecoration(hintText: "0.00", prefixText: "₹ ", border: OutlineInputBorder(), isDense: true),
-                      onChanged: (v) => setState(() {}),
-                    )),
+                    Expanded(
+                      child: Container(
+                        height: 34,
+                        child: TextField(
+                          controller: rows[index]['amount_ctrl'],
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+                          decoration: const InputDecoration(hintText: "0.00", prefixText: "₹ ", border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                          onChanged: (v) => setState(() {}),
+                        ),
+                      ),
+                    ),
                     const SizedBox(width: 10),
-                    IconButton(onPressed: () => _removeRow(index), icon: const Icon(Icons.delete_sweep, color: Colors.red)),
+                    IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _removeRow(index),
+                        icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent, size: 18)
+                    ),
                   ],
                 ),
               ],
@@ -629,26 +298,44 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
       List ledgers = state is LLoaded ? state.data : [];
       return Row(
         children: [
-          CircleAvatar(radius: 12, backgroundColor: isDebit ? const Color(0xFF1A237E) : Colors.orange,
-              child: Text(isDebit ? "DR" : "CR", style: const TextStyle(fontSize: 9, color: Colors.white))),
-          const SizedBox(width: 10),
+          Container(
+            width: 22, height: 22,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: isDebit ? const Color(0xFF0F4C81) : Colors.orange,
+                borderRadius: BorderRadius.circular(2)
+            ),
+            child: Text(isDebit ? "DR" : "CR", style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 8),
           Expanded(
-            child: DropdownSearch<dynamic>(
-              items: (f, l) => ledgers,
-              itemAsString: (item) => item['name'].toString(),
-              // ✅ CRITICAL FIX: compareFn added to prevent crash
-              compareFn: (i, s) => i['id'] == s['id'],
-              onChanged: (v) => setState(() => isDebit ? rows[index]['dr_ledger'] = v : rows[index]['cr_ledger'] = v),
-              decoratorProps: DropDownDecoratorProps(
-                decoration: InputDecoration(
-                  hintText: isDebit ? "Debit (To) / Receiver" : "Credit (By) / Giver",
-                  filled: true,
-                  fillColor: isDebit ? Colors.blue.shade50 : Colors.orange.shade50,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
+            child: Container(
+              height: 34,
+              child: DropdownSearch<dynamic>(
+                items: (f, l) => ledgers,
+                itemAsString: (item) => item['name'].toString(),
+                compareFn: (i, s) => i['id'] == s['id'],
+                onChanged: (v) => setState(() => isDebit ? rows[index]['dr_ledger'] = v : rows[index]['cr_ledger'] = v),
+                popupProps: const PopupProps.menu(
+                    showSearchBox: true,
+                    searchFieldProps: TextFieldProps(
+                        style: TextStyle(fontSize: 11),
+                        decoration: InputDecoration(hintText: "Filter master accounts hierarchy...", hintStyle: TextStyle(fontSize: 11), border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(8))
+                    )
+                ),
+                decoratorProps: DropDownDecoratorProps(
+                  baseStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                  decoration: InputDecoration(
+                      hintText: isDebit ? "Debit (To) / Receiver Account Parameters" : "Credit (By) / Giver Account Parameters",
+                      hintStyle: const TextStyle(fontSize: 11, color: Colors.black54),
+                      filled: true,
+                      fillColor: isDebit ? const Color(0xFFF0F6FC) : const Color(0xFFFFF8E1),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8)
+                  ),
                 ),
               ),
-              popupProps: const PopupProps.menu(showSearchBox: true),
             ),
           ),
         ],
@@ -664,10 +351,10 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
       builder: (context, constraints) {
         bool isMobile = constraints.maxWidth < 600;
         return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade200)),
           child: isMobile
-              ? Column(mainAxisSize: MainAxisSize.min, children: [ _totalSection(total), const Divider(), _buttonSection(true) ])
+              ? Column(mainAxisSize: MainAxisSize.min, children: [ _totalSection(total), const Divider(height: 12), _buttonSection(true) ])
               : Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [ _totalSection(total), _buttonSection(false) ]),
         );
       },
@@ -675,17 +362,38 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
   }
 
   Widget _totalSection(double total) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    const Text("TOTAL VOUCHER AMOUNT", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-    Text("₹ ${total.toStringAsFixed(2)}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+    const Text("TOTAL VOUCHER SUMMARY VALUE AMOUNT", style: TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+    const SizedBox(height: 2),
+    Text("₹ ${total.toStringAsFixed(2)}", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
   ]);
 
-  Widget _buttonSection(bool fullWidth) => Wrap(spacing: 10, runSpacing: 10, alignment: WrapAlignment.end, children: [
-    SizedBox(width: fullWidth ? double.infinity : null,
-        child: OutlinedButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: const Text("ADD LINE ENTRY"))),
-    SizedBox(width: fullWidth ? double.infinity : null,
+  Widget _buttonSection(bool fullWidth) => Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.end, children: [
+    SizedBox(
+        width: fullWidth ? double.infinity : null,
+        height: 36,
+        child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.grey),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))
+            ),
+            onPressed: _addRow,
+            icon: const Icon(Icons.add_rounded, size: 14),
+            label: const Text("ADD LINE ENTRY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87))
+        )
+    ),
+    SizedBox(
+        width: fullWidth ? double.infinity : null,
+        height: 36,
         child: ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.black, padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15)),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                padding: const EdgeInsets.symmetric(horizontal: 24)
+            ),
             onPressed: _onSave,
-            child: const Text("SAVE JOURNAL", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))),
+            child: const Text("SAVE JOURNAL RECORD", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 0.3))
+        )
+    ),
   ]);
 }

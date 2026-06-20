@@ -2,7 +2,7 @@ import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:stock_management/features/inventory/inventory_injection.dart';
+import 'package:stock_management/features/managment/injection_prtns.dart';
 import 'package:stock_management/features/masters/masters_injection.dart';
 import 'package:stock_management/features/transaction/tnx_injection.dart';
 import 'core/network/api_client.dart';
@@ -37,10 +37,8 @@ Future<void> init() async {
 
   // Features
   await initAuthInjection(sl);
-  await initInventoryInjection(sl);
   await initTnxInjection(sl);
   await mastersInjection(sl);
   await reportInjection(sl);
-
-
+  await initManagementInjection(sl);
 }

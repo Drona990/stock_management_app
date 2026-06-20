@@ -7,25 +7,25 @@ import '../../../../injection.dart';
 // ==========================================================================
 // 1. ENTITY & MODEL LAYER
 // ==========================================================================
-class UomEntity {
+class MaterialTypeEntity {
   final int? id;
-  final String uomName;
+  final String name;
   final String description;
 
-  UomEntity({
+  MaterialTypeEntity({
     this.id,
-    required this.uomName,
+    required this.name,
     required this.description,
   });
 
-  factory UomEntity.fromJson(Map<String, dynamic> json) => UomEntity(
+  factory MaterialTypeEntity.fromJson(Map<String, dynamic> json) => MaterialTypeEntity(
     id: json['id'],
-    uomName: json['uom_name'] ?? "",
+    name: json['name'] ?? "",
     description: json['description'] ?? "",
   );
 
   Map<String, dynamic> toJson() => {
-    "uom_name": uomName.trim().toUpperCase(),
+    "name": name.trim().toUpperCase(),
     "description": description.trim(),
   };
 }
@@ -33,12 +33,13 @@ class UomEntity {
 // ==========================================================================
 // 2. REPOSITORY LAYER
 // ==========================================================================
-class UomRepository {
+class MaterialTypeRepository {
   final ApiClient apiClient = sl<ApiClient>();
 
-  Future<List<UomEntity>> getUoms({String? query}) async {
+  Future<List<MaterialTypeEntity>> getMaterialTypes({String? query}) async {
+    // Django backend endpoint query router sequence map link
     final response = await apiClient.get(
-      '/api/master/uom/',
+      '/api/erp/material-types/',
       query: query != null ? {'search': query} : null,
     );
 
@@ -46,85 +47,85 @@ class UomRepository {
         ? response.data['results']
         : response.data is List ? response.data : [];
 
-    return data.map((x) => UomEntity.fromJson(x)).toList();
+    return data.map((x) => MaterialTypeEntity.fromJson(x)).toList();
   }
 
-  Future<void> createUom(UomEntity uom) async {
-    await apiClient.post('/api/master/uom/', data: uom.toJson());
+  Future<void> createMaterialType(MaterialTypeEntity materialType) async {
+    await apiClient.post('/api/erp/material-types/', data: materialType.toJson());
   }
 
-  Future<void> updateUom(int id, UomEntity uom) async {
-    await apiClient.put('/api/master/uom/$id/', data: uom.toJson());
+  Future<void> updateMaterialType(int id, MaterialTypeEntity materialType) async {
+    await apiClient.put('/api/erp/material-types/$id/', data: materialType.toJson());
   }
 
-  Future<void> deleteUom(int id) async {
-    await apiClient.delete('/api/master/uom/$id/');
+  Future<void> deleteMaterialType(int id) async {
+    await apiClient.delete('/api/erp/material-types/$id/');
   }
 }
 
 // ==========================================================================
 // 3. BLOC EVENTS, STATES & LOGIC LAYER
 // ==========================================================================
-abstract class UomEvent {}
-class LoadUoms extends UomEvent { final String? query; LoadUoms({this.query}); }
-class AddUom extends UomEvent { final UomEntity uom; AddUom(this.uom); }
-class EditUom extends UomEvent { final int id; final UomEntity uom; EditUom(this.id, this.uom); }
-class DeleteUom extends UomEvent { final int id; DeleteUom(this.id); }
+abstract class MaterialTypeEvent {}
+class LoadMaterialTypes extends MaterialTypeEvent { final String? query; LoadMaterialTypes({this.query}); }
+class AddMaterialType extends MaterialTypeEvent { final MaterialTypeEntity materialType; AddMaterialType(this.materialType); }
+class EditMaterialType extends MaterialTypeEvent { final int id; final MaterialTypeEntity materialType; EditMaterialType(this.id, this.materialType); }
+class DeleteMaterialType extends MaterialTypeEvent { final int id; DeleteMaterialType(this.id); }
 
-abstract class UomState {}
-class UomInitial extends UomState {}
-class UomLoading extends UomState {}
-class UomLoaded extends UomState { final List<UomEntity> uoms; UomLoaded(this.uoms); }
-class UomError extends UomState { final String message; UomError(this.message); }
+abstract class MaterialTypeState {}
+class MaterialTypeInitial extends MaterialTypeState {}
+class MaterialTypeLoading extends MaterialTypeState {}
+class MaterialTypeLoaded extends MaterialTypeState { final List<MaterialTypeEntity> materialTypes; MaterialTypeLoaded(this.materialTypes); }
+class MaterialTypeError extends MaterialTypeState { final String message; MaterialTypeError(this.message); }
 
-class UomBloc extends Bloc<UomEvent, UomState> {
-  final UomRepository repository;
+class MaterialTypeBloc extends Bloc<MaterialTypeEvent, MaterialTypeState> {
+  final MaterialTypeRepository repository;
 
-  UomBloc(this.repository) : super(UomInitial()) {
-    on<LoadUoms>((event, emit) async {
-      emit(UomLoading());
+  MaterialTypeBloc(this.repository) : super(MaterialTypeInitial()) {
+    on<LoadMaterialTypes>((event, emit) async {
+      emit(MaterialTypeLoading());
       try {
-        final data = await repository.getUoms(query: event.query);
-        emit(UomLoaded(data));
+        final data = await repository.getMaterialTypes(query: event.query);
+        emit(MaterialTypeLoaded(data));
       } catch (e) {
-        emit(UomError("Failed to synchronize UOM registries: ${e.toString()}"));
+        emit(MaterialTypeError("Failed to synchronize Material Type registries: ${e.toString()}"));
       }
     });
 
-    on<AddUom>((event, emit) async {
+    on<AddMaterialType>((event, emit) async {
       try {
-        await repository.createUom(event.uom);
-        add(LoadUoms());
-      } catch (e) { emit(UomError("Insertion constraint failure.")); }
+        await repository.createMaterialType(event.materialType);
+        add(LoadMaterialTypes());
+      } catch (e) { emit(MaterialTypeError("Insertion constraint failure.")); }
     });
 
-    on<EditUom>((event, emit) async {
+    on<EditMaterialType>((event, emit) async {
       try {
-        await repository.updateUom(event.id, event.uom);
-        add(LoadUoms());
-      } catch (e) { emit(UomError("Modification constraint failure.")); }
+        await repository.updateMaterialType(event.id, event.materialType);
+        add(LoadMaterialTypes());
+      } catch (e) { emit(MaterialTypeError("Modification constraint failure.")); }
     });
 
-    on<DeleteUom>((event, emit) async {
+    on<DeleteMaterialType>((event, emit) async {
       try {
-        await repository.deleteUom(event.id);
-        add(LoadUoms());
-      } catch (e) { emit(UomError("Deletion reference restriction integrity error.")); }
+        await repository.deleteMaterialType(event.id);
+        add(LoadMaterialTypes());
+      } catch (e) { emit(MaterialTypeError("Deletion reference restriction integrity error.")); }
     });
   }
 }
 
 // ==========================================================================
-// 4. MAIN VIEW SURFACE: HIGH-DENSITY ERP CANVAS
+// 4. MAIN VIEW SURFACE: HIGH-DENSITY ERP CANVAS MATCHED WITH UOM DESIGN
 // ==========================================================================
-class UomView extends StatefulWidget {
-  const UomView({super.key});
+class MaterialTypeMasterPage extends StatefulWidget {
+  const MaterialTypeMasterPage({super.key});
 
   @override
-  State<UomView> createState() => _UomViewState();
+  State<MaterialTypeMasterPage> createState() => _MaterialTypeMasterPageState();
 }
 
-class _UomViewState extends State<UomView> {
+class _MaterialTypeMasterPageState extends State<MaterialTypeMasterPage> {
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -133,10 +134,10 @@ class _UomViewState extends State<UomView> {
     const Color industrialSlate = Color(0xFF1E293B);
 
     return BlocProvider(
-      create: (context) => UomBloc(UomRepository())..add(LoadUoms()),
+      create: (context) => MaterialTypeBloc(MaterialTypeRepository())..add(LoadMaterialTypes()),
       child: Builder(
         builder: (newContext) {
-          final bloc = newContext.read<UomBloc>();
+          final bloc = newContext.read<MaterialTypeBloc>();
 
           return Container(
             color: const Color(0xFFF8FAFB),
@@ -144,17 +145,17 @@ class _UomViewState extends State<UomView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Minimal Header Panel
+                // Minimal Header Panel Matched with UOM Title Setup
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("UNIT OF MEASUREMENT MASTER",
+                        const Text("MATERIAL TYPE MASTER",
                             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: industrialSlate, letterSpacing: 0.3)),
                         const SizedBox(height: 2),
-                        Text("Manage system parameters units allocation matrix (PCS, KGS, ROLL, BAG)",
+                        Text("Configure industrial processing material categories (COPPER, IRON, BRASS, SS, PNEUMATIC)",
                             style: TextStyle(color: Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w600)),
                       ],
                     ),
@@ -176,9 +177,9 @@ class _UomViewState extends State<UomView> {
                         child: TextField(
                           controller: _searchController,
                           style: const TextStyle(fontSize: 11),
-                          onChanged: (val) => bloc.add(LoadUoms(query: val.trim())),
+                          onChanged: (val) => bloc.add(LoadMaterialTypes(query: val.trim())),
                           decoration: const InputDecoration(
-                            hintText: "Filter units by key parameters (e.g. KGS)...",
+                            hintText: "Filter categories by key parameters (e.g. COPPER)...",
                             hintStyle: TextStyle(fontSize: 11, color: Colors.grey),
                             prefixIcon: Icon(Icons.search_rounded, size: 14, color: Colors.blueGrey),
                             border: InputBorder.none,
@@ -191,7 +192,7 @@ class _UomViewState extends State<UomView> {
                     ElevatedButton.icon(
                       onPressed: () => _showFormDialog(newContext, bloc),
                       icon: const Icon(Icons.add_rounded, size: 14),
-                      label: const Text("NEW REGISTRY UNIT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      label: const Text("NEW CATEGORY TYPE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0F172A),
                         foregroundColor: Colors.white,
@@ -204,17 +205,17 @@ class _UomViewState extends State<UomView> {
                 ),
                 const SizedBox(height: 16),
 
-                // Main Content Records Tree Grid
+                // Main Content Table
                 Expanded(
-                  child: BlocBuilder<UomBloc, UomState>(
+                  child: BlocBuilder<MaterialTypeBloc, MaterialTypeState>(
                     builder: (context, state) {
-                      if (state is UomLoading) {
+                      if (state is MaterialTypeLoading) {
                         return const Center(child: CircularProgressIndicator(color: Color(0xFF00BCD4), strokeWidth: 1.5));
                       }
-                      if (state is UomLoaded) {
-                        return _buildIndustrialTable(state.uoms, bloc, isMobile);
+                      if (state is MaterialTypeLoaded) {
+                        return _buildIndustrialTable(state.materialTypes, bloc, isMobile);
                       }
-                      if (state is UomError) {
+                      if (state is MaterialTypeError) {
                         return Center(child: Text(state.message, style: const TextStyle(color: Colors.red, fontSize: 11)));
                       }
                       return const SizedBox();
@@ -229,7 +230,7 @@ class _UomViewState extends State<UomView> {
     );
   }
 
-  Widget _buildIndustrialTable(List<UomEntity> list, UomBloc bloc, bool isMobile) {
+  Widget _buildIndustrialTable(List<MaterialTypeEntity> list, MaterialTypeBloc bloc, bool isMobile) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -238,14 +239,13 @@ class _UomViewState extends State<UomView> {
       ),
       child: Column(
         children: [
-          // High Density Header Grid
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: const Color(0xFFF8FAFC),
             child: const Row(
               children: [
-                Expanded(flex: 2, child: Text("UOM TOKENS CODE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.blueGrey, letterSpacing: 0.3))),
-                Expanded(flex: 4, child: Text("UNIT DESCRIPTION DESCRIPTION", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.blueGrey, letterSpacing: 0.3))),
+                Expanded(flex: 2, child: Text("MATERIAL TYPE CODE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.blueGrey, letterSpacing: 0.3))),
+                Expanded(flex: 4, child: Text("CATEGORY SPECIFICATIONS / REMARKS", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.blueGrey, letterSpacing: 0.3))),
                 Expanded(flex: 1, child: Text("MANAGEMENT ACTIONS", textAlign: TextAlign.end, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.blueGrey, letterSpacing: 0.3))),
               ],
             ),
@@ -253,11 +253,11 @@ class _UomViewState extends State<UomView> {
           const Divider(height: 1),
           Expanded(
             child: list.isEmpty
-                ? const Center(child: Text("Zero operational metrics mapped in system records.", style: TextStyle(fontSize: 11, color: Colors.grey)))
+                ? const Center(child: Text("Zero material configuration categories found in system database.", style: TextStyle(fontSize: 11, color: Colors.grey)))
                 : ListView.separated(
               itemCount: list.length,
               separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
-              itemBuilder: (context, index) => _buildUomRow(list[index], bloc),
+              itemBuilder: (context, index) => _buildTypeRow(list[index], bloc),
             ),
           ),
         ],
@@ -265,7 +265,7 @@ class _UomViewState extends State<UomView> {
     );
   }
 
-  Widget _buildUomRow(UomEntity uom, UomBloc bloc) {
+  Widget _buildTypeRow(MaterialTypeEntity type, MaterialTypeBloc bloc) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -273,14 +273,14 @@ class _UomViewState extends State<UomView> {
           Expanded(
               flex: 2,
               child: Text(
-                  uom.uomName,
+                  type.name,
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: Color(0xFF0F4C81), letterSpacing: 0.2)
               )
           ),
           Expanded(
               flex: 4,
               child: Text(
-                  uom.description.isEmpty ? "—" : uom.description,
+                  type.description.isEmpty ? "—" : type.description,
                   style: const TextStyle(fontSize: 11, color: Color(0xFF334155))
               )
           ),
@@ -293,14 +293,14 @@ class _UomViewState extends State<UomView> {
                   icon: const Icon(Icons.edit_outlined, size: 14, color: Colors.orange),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  onPressed: () => _showFormDialog(context, bloc, uom: uom),
+                  onPressed: () => _showFormDialog(context, bloc, type: type),
                 ),
                 const SizedBox(width: 12),
                 IconButton(
                   icon: const Icon(Icons.delete_outline_rounded, size: 14, color: Colors.redAccent),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  onPressed: () => _showDeletePrompt(context, bloc, uom),
+                  onPressed: () => _showDeletePrompt(context, bloc, type),
                 ),
               ],
             ),
@@ -310,20 +310,19 @@ class _UomViewState extends State<UomView> {
     );
   }
 
-  // --- ACCIDENT-PROOF INDUSTRIAL DELETE DIALOG MATRIX ---
-  Future<void> _showDeletePrompt(BuildContext context, UomBloc bloc, UomEntity uom) async {
+  Future<void> _showDeletePrompt(BuildContext context, MaterialTypeBloc bloc, MaterialTypeEntity type) async {
     return showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         title: const Text("Confirm Parameter Deletion", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-        content: Text("Are you verified to permanently remove the UOM token sequence: '${uom.uomName}' from database registries?", style: const TextStyle(fontSize: 11, color: Colors.black87)),
+        content: Text("Are you verified to permanently wipe the Category token type: '${type.name}' from data records?", style: const TextStyle(fontSize: 11, color: Colors.black87)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(fontSize: 11))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
             onPressed: () {
-              bloc.add(DeleteUom(uom.id!));
+              bloc.add(DeleteMaterialType(type.id!));
               Navigator.pop(ctx);
             },
             child: const Text("YES, EXECUTE WIPE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
@@ -333,9 +332,9 @@ class _UomViewState extends State<UomView> {
     );
   }
 
-  void _showFormDialog(BuildContext context, UomBloc bloc, {UomEntity? uom}) {
-    final nameController = TextEditingController(text: uom?.uomName);
-    final descController = TextEditingController(text: uom?.description);
+  void _showFormDialog(BuildContext context, MaterialTypeBloc bloc, {MaterialTypeEntity? type}) {
+    final nameController = TextEditingController(text: type?.name);
+    final descController = TextEditingController(text: type?.description);
     final formKey = GlobalKey<FormState>();
 
     showDialog(
@@ -351,17 +350,17 @@ class _UomViewState extends State<UomView> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(uom == null ? "Initialize New UOM Token" : "Modify Registry UOM Specifications",
+                Text(type == null ? "Initialize New Material Type" : "Modify Material Type Configuration",
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
                 const SizedBox(height: 16),
 
                 _buildField(
                     nameController,
-                    "UOM TOKEN CODE (e.g. PCS)",
-                    validator: (v) => (v == null || v.trim().isEmpty) ? "UOM parameter code cannot be blank." : null
+                    "MATERIAL TYPE KEY (e.g. COPPER)",
+                    validator: (v) => (v == null || v.trim().isEmpty) ? "Material type name parameter cannot be blank." : null
                 ),
                 const SizedBox(height: 12),
-                _buildField(descController, "UNIT DESCRIPTION REGISTERED", maxLines: 2, isRequired: false),
+                _buildField(descController, "CATEGORY DESCRIPTION REGISTERED", maxLines: 2, isRequired: false),
                 const SizedBox(height: 20),
 
                 Row(
@@ -376,14 +375,14 @@ class _UomViewState extends State<UomView> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                       onPressed: () {
                         if (formKey.currentState!.validate()) {
-                          final entity = UomEntity(
-                            uomName: nameController.text.trim().toUpperCase(),
+                          final entity = MaterialTypeEntity(
+                            name: nameController.text.trim().toUpperCase(),
                             description: descController.text.trim(),
                           );
-                          if (uom == null) {
-                            bloc.add(AddUom(entity));
+                          if (type == null) {
+                            bloc.add(AddMaterialType(entity));
                           } else {
-                            bloc.add(EditUom(uom.id!, entity));
+                            bloc.add(EditMaterialType(type.id!, entity));
                           }
                           Navigator.pop(ctx);
                         }
@@ -428,25 +427,25 @@ import '../../../../injection.dart';
 // ==========================================================================
 // 1. ENTITY & MODEL LAYER
 // ==========================================================================
-class UomEntity {
+class MaterialTypeEntity {
   final int? id;
-  final String uomName;
+  final String name;
   final String description;
 
-  UomEntity({
+  MaterialTypeEntity({
     this.id,
-    required this.uomName,
+    required this.name,
     required this.description,
   });
 
-  factory UomEntity.fromJson(Map<String, dynamic> json) => UomEntity(
+  factory MaterialTypeEntity.fromJson(Map<String, dynamic> json) => MaterialTypeEntity(
     id: json['id'],
-    uomName: json['uom_name'] ?? "",
+    name: json['name'] ?? "",
     description: json['description'] ?? "",
   );
 
   Map<String, dynamic> toJson() => {
-    "uom_name": uomName.trim().toUpperCase(),
+    "name": name.trim().toUpperCase(),
     "description": description.trim(),
   };
 }
@@ -454,12 +453,12 @@ class UomEntity {
 // ==========================================================================
 // 2. REPOSITORY LAYER
 // ==========================================================================
-class UomRepository {
+class MaterialTypeRepository {
   final ApiClient apiClient = sl<ApiClient>();
 
-  Future<List<UomEntity>> getUoms({String? query}) async {
+  Future<List<MaterialTypeEntity>> getMaterialTypes({String? query}) async {
     final response = await apiClient.get(
-      '/api/master/uom/',
+      '/api/erp/material-types/',
       query: query != null ? {'search': query} : null,
     );
 
@@ -467,70 +466,70 @@ class UomRepository {
         ? response.data['results']
         : response.data is List ? response.data : [];
 
-    return data.map((x) => UomEntity.fromJson(x)).toList();
+    return data.map((x) => MaterialTypeEntity.fromJson(x)).toList();
   }
 
-  Future<void> createUom(UomEntity uom) async {
-    await apiClient.post('/api/master/uom/', data: uom.toJson());
+  Future<void> createMaterialType(MaterialTypeEntity materialType) async {
+    await apiClient.post('/api/erp/material-types/', data: materialType.toJson());
   }
 
-  Future<void> updateUom(int id, UomEntity uom) async {
-    await apiClient.put('/api/master/uom/$id/', data: uom.toJson());
+  Future<void> updateMaterialType(int id, MaterialTypeEntity materialType) async {
+    await apiClient.put('/api/erp/material-types/$id/', data: materialType.toJson());
   }
 
-  Future<void> deleteUom(int id) async {
-    await apiClient.delete('/api/master/uom/$id/');
+  Future<void> deleteMaterialType(int id) async {
+    await apiClient.delete('/api/erp/material-types/$id/');
   }
 }
 
 // ==========================================================================
 // 3. BLOC EVENTS, STATES & LOGIC LAYER
 // ==========================================================================
-abstract class UomEvent {}
-class LoadUoms extends UomEvent { final String? query; LoadUoms({this.query}); }
-class AddUom extends UomEvent { final UomEntity uom; AddUom(this.uom); }
-class EditUom extends UomEvent { final int id; final UomEntity uom; EditUom(this.id, this.uom); }
-class DeleteUomEvent extends UomEvent { final int id; DeleteUomEvent(this.id); }
+abstract class MaterialTypeEvent {}
+class LoadMaterialTypes extends MaterialTypeEvent { final String? query; LoadMaterialTypes({this.query}); }
+class AddMaterialType extends MaterialTypeEvent { final MaterialTypeEntity materialType; AddMaterialType(this.materialType); }
+class EditMaterialType extends MaterialTypeEvent { final int id; final MaterialTypeEntity materialType; EditMaterialType(this.id, this.materialType); }
+class DeleteMaterialTypeEvent extends MaterialTypeEvent { final int id; DeleteMaterialTypeEvent(this.id); }
 
-abstract class UomState {}
-class UomInitial extends UomState {}
-class UomLoading extends UomState {}
-class UomLoaded extends UomState { final List<UomEntity> uoms; UomLoaded(this.uoms); }
-class UomError extends UomState { final String message; UomError(this.message); }
+abstract class MaterialTypeState {}
+class MaterialTypeInitial extends MaterialTypeState {}
+class MaterialTypeLoading extends MaterialTypeState {}
+class MaterialTypeLoaded extends MaterialTypeState { final List<MaterialTypeEntity> materialTypes; MaterialTypeLoaded(this.materialTypes); }
+class MaterialTypeError extends MaterialTypeState { final String message; MaterialTypeError(this.message); }
 
-class UomBloc extends Bloc<UomEvent, UomState> {
-  final UomRepository repository;
+class MaterialTypeBloc extends Bloc<MaterialTypeEvent, MaterialTypeState> {
+  final MaterialTypeRepository repository;
 
-  UomBloc(this.repository) : super(UomInitial()) {
-    on<LoadUoms>((event, emit) async {
-      emit(UomLoading());
+  MaterialTypeBloc(this.repository) : super(MaterialTypeInitial()) {
+    on<LoadMaterialTypes>((event, emit) async {
+      emit(MaterialTypeLoading());
       try {
-        final data = await repository.getUoms(query: event.query);
-        emit(UomLoaded(data));
+        final data = await repository.getMaterialTypes(query: event.query);
+        emit(MaterialTypeLoaded(data));
       } catch (e) {
-        emit(UomError("Failed to synchronize UOM registries: ${e.toString()}"));
+        emit(MaterialTypeError("Failed to synchronize Material Type registries: ${e.toString()}"));
       }
     });
 
-    on<AddUom>((event, emit) async {
+    on<AddMaterialType>((event, emit) async {
       try {
-        await repository.createUom(event.uom);
-        add(LoadUoms());
-      } catch (e) { emit(UomError("Insertion constraint failure.")); }
+        await repository.createMaterialType(event.materialType);
+        add(LoadMaterialTypes());
+      } catch (e) { emit(MaterialTypeError("Insertion constraint failure.")); }
     });
 
-    on<EditUom>((event, emit) async {
+    on<EditMaterialType>((event, emit) async {
       try {
-        await repository.updateUom(event.id, event.uom);
-        add(LoadUoms());
-      } catch (e) { emit(UomError("Modification constraint failure.")); }
+        await repository.updateMaterialType(event.id, event.materialType);
+        add(LoadMaterialTypes());
+      } catch (e) { emit(MaterialTypeError("Modification constraint failure.")); }
     });
 
-    on<DeleteUomEvent>((event, emit) async {
+    on<DeleteMaterialTypeEvent>((event, emit) async {
       try {
-        await repository.deleteUom(event.id);
-        add(LoadUoms());
-      } catch (e) { emit(UomError("Deletion reference restriction integrity error.")); }
+        await repository.deleteMaterialType(event.id);
+        add(LoadMaterialTypes());
+      } catch (e) { emit(MaterialTypeError("Deletion reference restriction integrity error.")); }
     });
   }
 }
@@ -538,48 +537,48 @@ class UomBloc extends Bloc<UomEvent, UomState> {
 // ==========================================================================
 // 4. MAIN VIEW SURFACE: SPLIT HIGH-DENSITY ERP CANVAS
 // ==========================================================================
-class UomView extends StatefulWidget {
-  const UomView({super.key});
+class MaterialTypeMasterPage extends StatefulWidget {
+  const MaterialTypeMasterPage({super.key});
 
   @override
-  State<UomView> createState() => _UomViewState();
+  State<MaterialTypeMasterPage> createState() => _MaterialTypeMasterPageState();
 }
 
-class _UomViewState extends State<UomView> {
+class _MaterialTypeMasterPageState extends State<MaterialTypeMasterPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _searchCtrl = TextEditingController();
-  UomEntity? editingUom;
+  MaterialTypeEntity? editingType;
 
-  void _onSave(UomBloc bloc) {
+  void _onSave(MaterialTypeBloc bloc) {
     if (_formKey.currentState!.validate()) {
-      final entity = UomEntity(
-        uomName: _nameCtrl.text.trim().toUpperCase(),
+      final entity = MaterialTypeEntity(
+        name: _nameCtrl.text.trim().toUpperCase(),
         description: _descCtrl.text.trim(),
       );
 
-      if (editingUom == null) {
-        bloc.add(AddUom(entity));
+      if (editingType == null) {
+        bloc.add(AddMaterialType(entity));
       } else {
-        bloc.add(EditUom(editingUom!.id!, entity));
+        bloc.add(EditMaterialType(editingType!.id!, entity));
       }
       _resetForm();
-      _showSnackbar("Transaction committed successfully!", Colors.green);
+      _showSnackbar("Category parameters saved successfully!", Colors.green);
     }
   }
 
-  void _populateForm(UomEntity item) {
+  void _populateForm(MaterialTypeEntity item) {
     setState(() {
-      editingUom = item;
-      _nameCtrl.text = item.uomName;
+      editingType = item;
+      _nameCtrl.text = item.name;
       _descCtrl.text = item.description;
     });
   }
 
   void _resetForm() {
     setState(() {
-      editingUom = null;
+      editingType = null;
       _nameCtrl.clear();
       _descCtrl.clear();
     });
@@ -597,20 +596,20 @@ class _UomViewState extends State<UomView> {
     bool useSplitView = screenWidth > 800;
 
     return BlocProvider(
-      create: (context) => UomBloc(UomRepository())..add(LoadUoms()),
+      create: (context) => MaterialTypeBloc(MaterialTypeRepository())..add(LoadMaterialTypes()),
       child: Builder(
         builder: (newContext) {
-          final bloc = newContext.read<UomBloc>();
+          final bloc = newContext.read<MaterialTypeBloc>();
 
           return Scaffold(
             backgroundColor: const Color(0xFFF1F5F9),
             body: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ➡️ LEFT SIDE: PERSISTENT DIRECTORY PANE
+                // ➡️ LEFT SIDE: PERSISTENT DIRECTORY BAR
                 if (useSplitView) _buildLeftDirectoryPane(bloc),
 
-                // ➡️ RIGHT SIDE: MAIN OPERATIONS PANEL
+                // ➡️ RIGHT SIDE: MAIN FORM DATA MATRIX WORKspace
                 Expanded(
                   child: Container(
                     color: Colors.white,
@@ -648,7 +647,7 @@ class _UomViewState extends State<UomView> {
     );
   }
 
-  Widget _buildLeftDirectoryPane(UomBloc bloc) {
+  Widget _buildLeftDirectoryPane(MaterialTypeBloc bloc) {
     return Container(
       width: 320,
       decoration: BoxDecoration(
@@ -664,11 +663,11 @@ class _UomViewState extends State<UomView> {
               children: [
                 Icon(Icons.inventory_2_outlined, color: Colors.cyanAccent, size: 16),
                 SizedBox(width: 10),
-                Text("UOM REGISTRY TOKENS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5)),
+                Text("MATERIAL SYSTEM TYPES", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5)),
               ],
             ),
           ),
-          // Industrial Light Background Search Frame
+          // Clean Light Industrial Search Bar
           Padding(
             padding: const EdgeInsets.all(12),
             child: Container(
@@ -681,9 +680,9 @@ class _UomViewState extends State<UomView> {
               child: TextField(
                 controller: _searchCtrl,
                 style: const TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.bold),
-                onChanged: (v) => bloc.add(LoadUoms(query: v.trim())),
+                onChanged: (v) => bloc.add(LoadMaterialTypes(query: v.trim())),
                 decoration: const InputDecoration(
-                  hintText: "Filter units (e.g. KGS)...",
+                  hintText: "Filter categories (e.g. COPPER)...",
                   hintStyle: TextStyle(fontSize: 11, color: Colors.grey),
                   prefixIcon: Icon(Icons.search_rounded, size: 14, color: Colors.grey),
                   border: InputBorder.none,
@@ -694,29 +693,29 @@ class _UomViewState extends State<UomView> {
             ),
           ),
           Expanded(
-            child: BlocBuilder<UomBloc, UomState>(
+            child: BlocBuilder<MaterialTypeBloc, MaterialTypeState>(
               builder: (context, state) {
-                if (state is UomLoading) {
+                if (state is MaterialTypeLoading) {
                   return const Center(child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.cyanAccent));
                 }
-                if (state is UomLoaded) {
-                  if (state.uoms.isEmpty) {
-                    return const Center(child: Text("Zero metrics found", style: TextStyle(color: Colors.grey, fontSize: 11)));
+                if (state is MaterialTypeLoaded) {
+                  if (state.materialTypes.isEmpty) {
+                    return const Center(child: Text("Zero categories mapped", style: TextStyle(color: Colors.grey, fontSize: 11)));
                   }
 
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    itemCount: state.uoms.length,
+                    itemCount: state.materialTypes.length,
                     itemBuilder: (context, idx) {
-                      final item = state.uoms[idx];
-                      bool isSelected = editingUom?.id == item.id;
+                      final item = state.materialTypes[idx];
+                      bool isSelected = editingType?.id == item.id;
                       return ListTile(
                         onTap: () => _populateForm(item),
                         dense: true,
                         selected: isSelected,
                         selectedTileColor: const Color(0xFF1E293B),
-                        title: Text(item.uomName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isSelected ? Colors.cyanAccent : Colors.white)),
-                        subtitle: Text(item.description.isEmpty ? "No description mapped" : item.description, style: TextStyle(color: Colors.grey.shade400, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        title: Text(item.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isSelected ? Colors.cyanAccent : Colors.white)),
+                        subtitle: Text(item.description.isEmpty ? "No specification description" : item.description, style: TextStyle(color: Colors.grey.shade400, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline_rounded, size: 14, color: Colors.redAccent),
                           onPressed: () => _showDeletePrompt(context, bloc, item),
@@ -734,7 +733,7 @@ class _UomViewState extends State<UomView> {
     );
   }
 
-  Widget _buildTopActionBar(bool splitView, UomBloc bloc) {
+  Widget _buildTopActionBar(bool splitView, MaterialTypeBloc bloc) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -749,14 +748,14 @@ class _UomViewState extends State<UomView> {
               Container(width: 4, height: 16, color: const Color(0xFF0F172A)),
               const SizedBox(width: 8),
               Text(
-                (editingUom == null ? "NEW UNIT PARAMETER" : "MODIFY UOM DETAILS").toUpperCase(),
+                (editingType == null ? "NEW TYPE PARAMETER" : "MODIFY TYPE DETAILS").toUpperCase(),
                 style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF0F172A), fontSize: 12, letterSpacing: 0.5),
               ),
             ],
           ),
           Row(
             children: [
-              if (editingUom != null)
+              if (editingType != null)
                 TextButton.icon(
                   onPressed: _resetForm,
                   icon: const Icon(Icons.clear_rounded, size: 14, color: Colors.red),
@@ -765,8 +764,8 @@ class _UomViewState extends State<UomView> {
               const SizedBox(width: 8),
               ElevatedButton.icon(
                 onPressed: () => _onSave(bloc),
-                icon: Icon(editingUom == null ? Icons.save_outlined : Icons.done_all_rounded, size: 14),
-                label: Text((editingUom == null ? "SAVE UOM" : "UPDATE").toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                icon: Icon(editingType == null ? Icons.save_outlined : Icons.done_all_rounded, size: 14),
+                label: Text((editingType == null ? "SAVE TYPE" : "UPDATE").toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
@@ -782,7 +781,7 @@ class _UomViewState extends State<UomView> {
     );
   }
 
-  Widget _buildFormCard(UomBloc bloc) {
+  Widget _buildFormCard(MaterialTypeBloc bloc) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -790,7 +789,7 @@ class _UomViewState extends State<UomView> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
           color: const Color(0xFFF1F5F9),
-          child: const Text("1. METRIC CODE MAPPING", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF475569), letterSpacing: 0.3)),
+          child: const Text("1. MATERIAL CLASSIFICATION TOKENS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF475569), letterSpacing: 0.3)),
         ),
         const SizedBox(height: 12),
         Row(
@@ -799,8 +798,8 @@ class _UomViewState extends State<UomView> {
             Expanded(
               child: _sharpTextField(
                 _nameCtrl,
-                "UOM TOKEN CODE (e.g. PCS, KGS) *",
-                validator: (v) => (v == null || v.trim().isEmpty) ? "UOM parameter code cannot be blank." : null,
+                "MATERIAL TYPE KEY CODE (e.g. COPPER, BRASS) *",
+                validator: (v) => (v == null || v.trim().isEmpty) ? "Material type token name cannot be blank." : null,
               ),
             ),
           ],
@@ -810,10 +809,10 @@ class _UomViewState extends State<UomView> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
           color: const Color(0xFFF1F5F9),
-          child: const Text("2. DATA DEFINITION SPECIFICATION", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF475569), letterSpacing: 0.3)),
+          child: const Text("2. CATEGORY SPECIFICATION SPEC SHEET REMARKS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF475569), letterSpacing: 0.3)),
         ),
         const SizedBox(height: 12),
-        _sharpTextField(_descCtrl, "UNIT DESCRIPTION REGISTERED", maxLines: 3),
+        _sharpTextField(_descCtrl, "CATEGORY DESCRIPTION REGISTERED", maxLines: 3),
       ],
     );
   }
@@ -854,19 +853,19 @@ class _UomViewState extends State<UomView> {
     );
   }
 
-  Future<void> _showDeletePrompt(BuildContext context, UomBloc bloc, UomEntity uom) async {
+  Future<void> _showDeletePrompt(BuildContext context, MaterialTypeBloc bloc, MaterialTypeEntity type) async {
     return showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         title: const Text("Confirm Parameter Deletion", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-        content: Text("Are you verified to permanently remove the UOM token sequence: '${uom.uomName}' from database registries?", style: const TextStyle(fontSize: 11, color: Colors.black87)),
+        content: Text("Are you verified to permanently remove the Material Type token sequence: '${type.name}' from database registries?", style: const TextStyle(fontSize: 11, color: Colors.black87)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(fontSize: 11, color: Colors.blue))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: const RoundedRectangleBorder()),
             onPressed: () {
-              bloc.add(DeleteUomEvent(uom.id!));
+              bloc.add(DeleteMaterialTypeEvent(type.id!));
               Navigator.pop(ctx);
               _resetForm();
               _showSnackbar("Wipe operation complete.", Colors.redAccent);
@@ -878,7 +877,7 @@ class _UomViewState extends State<UomView> {
     );
   }
 
-  Widget _buildMobileDirectoryButton(UomBloc bloc) {
+  Widget _buildMobileDirectoryButton(MaterialTypeBloc bloc) {
     return ElevatedButton.icon(
       onPressed: () {
         showModalBottomSheet(
@@ -892,7 +891,7 @@ class _UomViewState extends State<UomView> {
         );
       },
       icon: const Icon(Icons.list_alt_rounded, size: 14),
-      label: const Text("VIEW UOM TOKENS DIRECTORY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+      label: const Text("VIEW MATERIAL TYPES DIRECTORY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF0F4C81),
         foregroundColor: Colors.white,

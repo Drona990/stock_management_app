@@ -1,342 +1,115 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../injection.dart';
 import '../pages/bar&resturant/user_management_page.dart';
-import '../../../inventory/presentation/bloc/location_bloc.dart';
 
-class CreateUserDialog extends StatefulWidget {
-  const CreateUserDialog({super.key});
-
+class EditUserDialog extends StatefulWidget {
+  final dynamic user;
+  const EditUserDialog({super.key, required this.user});
   @override
-  State<CreateUserDialog> createState() => _CreateUserDialogState();
+  State<EditUserDialog> createState() => _EditUserDialogState();
 }
 
-class _CreateUserDialogState extends State<CreateUserDialog> {
-  final _formKey = GlobalKey<FormState>();
-
-  // Controllers
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _dobController = TextEditingController();
-
-  final storage = const FlutterSecureStorage();
-
-  String _selectedRole = "staff";
-  String _selectedGender = "M";
-  int? _selectedLocationId;
-  String _currentUserRole = "";
-  bool _isLoading = false;
-  bool _isPermissionLoaded = false;
+class _EditUserDialogState extends State<EditUserDialog> {
+  late TextEditingController _nameController, _passwordController, _ageController;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _checkPermissions();
-    context.read<LocationBloc>().add(LoadLocations());
-
-    _firstNameController.addListener(_updateFullName);
-    _lastNameController.addListener(_updateFullName);
-  }
-
-  void _updateFullName() {
-    setState(() {
-      _nameController.text = "${_firstNameController.text.trim()} ${_lastNameController.text.trim()}".trim();
-    });
+    _nameController = TextEditingController(text: widget.user['name']);
+    _ageController = TextEditingController(text: (widget.user['meta_specs']?['age'] ?? '25').toString());
+    _passwordController = TextEditingController();
   }
 
   @override
   void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
     _nameController.dispose();
-    _emailController.dispose();
+    _ageController.dispose();
     _passwordController.dispose();
-    _phoneController.dispose();
-    _dobController.dispose();
     super.dispose();
   }
 
-  Future<void> _checkPermissions() async {
-    final role = await storage.read(key: 'user_role') ?? 'staff';
-    if (mounted) {
-      setState(() {
-        _currentUserRole = role.toLowerCase();
-        _isPermissionLoaded = true;
-      });
-    }
-  }
+  void _save() async {
+    setState(() => _saving = true);
 
-  Future<void> _selectDate() async {
-    DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(2000),
-      firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) {
-      setState(() => _dobController.text = picked.toString().split(' ')[0]);
-    }
-  }
-
-  Future<void> _submitData() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_selectedLocationId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a location")));
-      return;
-    }
-
-    setState(() => _isLoading = true);
+    // Async gaps se pehle local reference capture karna crash proof banata hai
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final bloc = context.read<UserMgmtBloc>();
 
     try {
-      final String path = _selectedRole == 'admin' ? '/api/admin/create/' : '/api/staff/create/';
-
-      await sl<ApiClient>().post(path, data: {
-        "email": _emailController.text.trim(),
-        "password": _passwordController.text,
-        "first_name": _firstNameController.text.trim(),
-        "last_name": _lastNameController.text.trim(),
+      final Map<String, dynamic> updateData = {
         "name": _nameController.text.trim(),
-        "phone_number": _phoneController.text.trim(),
-        "dob": _dobController.text,
-        "gender": _selectedGender,
-        "role": _selectedRole,
-        "location": _selectedLocationId,
-      });
+        "age": int.tryParse(_ageController.text) ?? 25
+      };
+      if (_passwordController.text.isNotEmpty) {
+        updateData["password"] = _passwordController.text;
+      }
 
-      if (mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account Created!"), backgroundColor: Colors.green));
-        context.read<UserMgmtBloc>().add(LoadUsers());
-      }
+      await sl<ApiClient>().put('/api/user/${widget.user['user_id']}/update/', data: updateData);
+
+      navigator.pop();
+      messenger.showSnackBar(
+          const SnackBar(content: Text("✅ Profile Registries Synced Successfully!"), backgroundColor: Colors.green)
+      );
+      bloc.add(LoadUsers());
+
     } catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text("❌ Modification Fault: $e"), backgroundColor: Colors.red)
+      );
+
+    } finally { // ✅ FIXED: Ab 'finally' block block-level states ko background me safely toggle karega
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+        setState(() => _saving = false);
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
-
   @override
   Widget build(BuildContext context) {
-    if (!_isPermissionLoaded) return const Center(child: CircularProgressIndicator());
-
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: SingleChildScrollView(
-        child: Container(
-          width: 500,
-          padding: const EdgeInsets.all(32),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      child: Container(
+        width: 360,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Modify Scope Specifications", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+            const SizedBox(height: 16),
+            TextField(controller: _nameController, style: const TextStyle(fontSize: 11), decoration: _inputStyle("COMPILED FULL NAME", Icons.person_outline)),
+            const SizedBox(height: 12),
+            TextField(controller: _ageController, style: const TextStyle(fontSize: 11), decoration: _inputStyle("AGE PARAMETER", Icons.calendar_month_outlined)),
+            const SizedBox(height: 12),
+            TextField(controller: _passwordController, style: const TextStyle(fontSize: 11), obscureText: true, decoration: _inputStyle("OVERRIDE PASSWORD REGISTER", Icons.lock_reset)),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Text("Create New User", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 24),
-
-                // Access Level (Role) Dropdown
-                _buildLabel("ACCESS LEVEL"),
-                DropdownButtonFormField<String>(
-                  value: _selectedRole,
-                  items: [
-                    if (_currentUserRole == 'superuser')
-                      const DropdownMenuItem(value: "admin", child: Text("Administrator / Manager")),
-                    const DropdownMenuItem(value: "staff", child: Text("Staff")),
-                  ],
-                  onChanged: (val) => setState(() => _selectedRole = val!),
-                  decoration: _inputStyle("", Icons.admin_panel_settings_outlined),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL", style: TextStyle(fontSize: 11))),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
+                  child: _saving ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white)) : const Text("COMMIT REGISTRY", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(height: 20),
-
-                Row(
-                  children: [
-                    Expanded(child: _buildField("FIRST NAME", _firstNameController, "First Name", Icons.badge_outlined)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildField("LAST NAME", _lastNameController, "Last Name", Icons.badge_outlined)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                _buildLabel("FULL NAME (AUTO)"),
-                TextFormField(
-                  controller: _nameController,
-                  readOnly: true,
-                  decoration: _inputStyle("", Icons.person_outline).copyWith(fillColor: Colors.grey[200]),
-                ),
-                const SizedBox(height: 16),
-
-                Row(
-                  children: [
-                    Expanded(child: _buildField("PHONE NUMBER", _phoneController, "0000000000", Icons.phone_android_outlined)),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildLabel("DATE OF BIRTH"),
-                          TextFormField(
-                            controller: _dobController,
-                            readOnly: true,
-                            onTap: _selectDate,
-                            decoration: _inputStyle("YYYY-MM-DD", Icons.calendar_today_outlined),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildLabel("GENDER"),
-                          DropdownButtonFormField<String>(
-                            value: _selectedGender,
-                            items: const [
-                              DropdownMenuItem(value: "M", child: Text("Male")),
-                              DropdownMenuItem(value: "F", child: Text("Female")),
-                              DropdownMenuItem(value: "O", child: Text("Other")),
-                            ],
-                            onChanged: (v) => setState(() => _selectedGender = v!),
-                            decoration: _inputStyle("", Icons.transgender_outlined),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-/*
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildLabel("LOCATION"),
-                          BlocBuilder<LocationBloc, LocationState>(
-                            builder: (context, state) {
-                              return DropdownButtonFormField<int>(
-                                value: _selectedLocationId,
-                                items: state is LocationLoaded
-                                    ? state.locations.map((l) => DropdownMenuItem(value: l.id, child: Text(l.name))).toList()
-                                    : [],
-                                onChanged: (v) => setState(() => _selectedLocationId = v),
-                                decoration: _inputStyle("Select", Icons.location_on_outlined),
-                                validator: (v) => v == null ? "Required" : null,
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-*/
-
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildLabel("LOCATION"),
-                          const SizedBox(height: 8), // Label aur field ke beech thoda space
-                          BlocBuilder<LocationBloc, LocationState>(
-                            builder: (context, state) {
-                              // Check if state is loaded to show the correct items
-                              List<DropdownMenuItem<int>> dropdownItems = [];
-                              if (state is LocationLoaded) {
-                                dropdownItems = state.locations.map((l) {
-                                  return DropdownMenuItem<int>(
-                                    value: l.id,
-                                    child: Text(
-                                      l.name,
-                                      overflow: TextOverflow.ellipsis, // ✅ Mobile overflow fix
-                                      style: const TextStyle(fontSize: 13),
-                                    ),
-                                  );
-                                }).toList();
-                              }
-
-                              return DropdownButtonFormField<int>(
-                                value: _selectedLocationId,
-                                isExpanded: true, // ✅ Important: Dropdown ko width overflow se bachata hai
-                                hint: const Text("Select Branch", style: TextStyle(fontSize: 13)),
-                                items: dropdownItems,
-                                onChanged: (v) => setState(() => _selectedLocationId = v),
-                                // Menu ki height control karein taaki mobile keyboard ke saath crash na ho
-                                menuMaxHeight: 350,
-                                decoration: _inputStyle("Select", Icons.location_on_outlined).copyWith(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                ),
-                                validator: (v) => v == null ? "Required" : null,
-                                // Dropdown icon size scaling
-                                icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    )
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                _buildField("EMAIL", _emailController, "user@example.com", Icons.email_outlined, isEmail: true),
-                const SizedBox(height: 16),
-                _buildField("PASSWORD", _passwordController, "••••••••", Icons.lock_outline, isPassword: true),
-
-                const SizedBox(height: 32),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _submitData,
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1C24), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16)),
-                      child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("CREATE"),
-                    ),
-                  ],
-                )
               ],
-            ),
-          ),
+            )
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, String hint, IconData icon, {bool isEmail = false, bool isPassword = false}) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _buildLabel(label),
-      TextFormField(
-        controller: controller,
-        obscureText: isPassword,
-        decoration: _inputStyle(hint, icon),
-        validator: (v) {
-          if (v!.isEmpty) return "Required";
-          if (isEmail && !v.contains("@")) return "Invalid Email";
-          return null;
-        },
-      ),
-    ]);
-  }
-
-  Widget _buildLabel(String text) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(text, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)));
-
-  InputDecoration _inputStyle(String hint, IconData icon) => InputDecoration(
-    hintText: hint,
-    prefixIcon: Icon(icon, size: 18, color: const Color(0xFF00BCD4)),
-    filled: true,
-    fillColor: const Color(0xFFF8F9FA),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-    contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+  InputDecoration _inputStyle(String h, IconData i) => InputDecoration(
+    labelText: h,
+    labelStyle: const TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold),
+    prefixIcon: Icon(i, size: 14, color: const Color(0xFF00BCD4)),
+    border: const OutlineInputBorder(),
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
   );
 }

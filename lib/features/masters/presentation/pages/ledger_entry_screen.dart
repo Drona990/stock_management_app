@@ -7,14 +7,32 @@ import 'package:printing/printing.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../injection.dart';
 
-// REPOSITORY
+// ==========================================================================
+// 1. REPOSITORY LAYER
+// ==========================================================================
+// ==========================================================================
+// 1. REPOSITORY LAYER (Fixed Paginated Extraction Strategy)
+// ==========================================================================
 class LedgerMasterRepository {
   final ApiClient apiClient = sl<ApiClient>();
+
   Future<List<dynamic>> fetchLedgers({String? search}) async {
     final res = await apiClient.get('/api/master/ledger/', query: {if (search != null) 'search': search});
     print("ledger master data $res");
-    return res.data;
+
+    // ✅ FIX: Django DRF Pagination layer se 'results' key ko extract kiya
+    if (res.data is Map && res.data['results'] != null) {
+      return res.data['results'] as List<dynamic>;
+    }
+
+    // Fallback layer agar bina pagination ke direct list aaye
+    if (res.data is List) {
+      return res.data as List<dynamic>;
+    }
+
+    return [];
   }
+
   Future<void> saveLedger(Map<String, dynamic> data, {int? id}) async {
     if (id != null) {
       await apiClient.put('/api/master/ledger/$id/', data: data);
@@ -23,8 +41,9 @@ class LedgerMasterRepository {
     }
   }
 }
-
-// BLOC
+// ==========================================================================
+// 2. BLOC LAYER: LOGIC STRATIFICATION
+// ==========================================================================
 abstract class LedgerEvent {}
 class LoadData extends LedgerEvent { final String? s; LoadData({this.s}); }
 class SaveData extends LedgerEvent { final Map<String, dynamic> d; final int? id; SaveData(this.d, {this.id}); }
@@ -48,15 +67,17 @@ class LedgerMasterBloc extends Bloc<LedgerEvent, LedgerState> {
   }
 }
 
-// UI PAGE
+// ==========================================================================
+// 3. MAIN SURFACE CONTAINER UI
+// ==========================================================================
 class LedgerMasterPage extends StatefulWidget {
   const LedgerMasterPage({super.key});
   @override
   State<LedgerMasterPage> createState() => _LedgerMasterPageState();
 }
 
-
 class _LedgerMasterPageState extends State<LedgerMasterPage> {
+  // Hardcoded identical internal naming parameters controller setups
   final _name = TextEditingController();
   final _cr = TextEditingController(text: "0.00");
   final _dr = TextEditingController(text: "0.00");
@@ -70,10 +91,11 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
   @override
   void initState() {
     super.initState();
-    context.read<LedgerMasterBloc>().add(LoadData());
+    // Safe initialization context triggers block
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<LedgerMasterBloc>().add(LoadData());
+    });
   }
-
-  // --- Logic Functions ---
 
   void _fill(Map<String, dynamic> d) {
     setState(() {
@@ -112,52 +134,66 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
   }
 
   void _snack(String m, Color c) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
+      .showSnackBar(SnackBar(content: Text(m, style: const TextStyle(fontSize: 12)), backgroundColor: c));
 
   @override
   Widget build(BuildContext context) {
+    const Color industrialSlate = Color(0xFF1E293B);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFF8FAFB),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF212121),
         elevation: 0,
-        title: const Text("LEDGER MASTER",
-            style: TextStyle(
-                color: Colors.cyanAccent,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1)),
+        backgroundColor: Colors.white,
+        toolbarHeight: 50,
+        iconTheme: const IconThemeData(color: industrialSlate, size: 18),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("LEDGER MASTER",
+                style: TextStyle(color: industrialSlate, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+            Text("FINANCIAL REPOSITORIES PARAMETERS REGISTRY",
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 8, fontWeight: FontWeight.bold))
+          ],
+        ),
+        shape: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
       ),
       body: LayoutBuilder(builder: (context, constraints) {
         bool isMobile = constraints.maxWidth < 900;
         return isMobile
             ? ListView(
-            children: [_buildFormCard(double.infinity), _buildTableCard(500)])
-            : Row(children: [
-          _buildFormCard(330),
-          Expanded(child: _buildTableCard(null))
-        ]);
+            padding: const EdgeInsets.all(8),
+            children: [_buildFormCard(double.infinity), const SizedBox(height: 12), _buildTableCard(500, constraints)])
+            : Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildFormCard(280),
+              const SizedBox(width: 12),
+              Expanded(child: _buildTableCard(null, constraints))
+            ],
+          ),
+        );
       }),
     );
   }
 
-  // --- UI Components ---
-
+  // --- High Density Input Form Canvas ---
   Widget _buildFormCard(double w) => Container(
     width: w,
-    margin: const EdgeInsets.all(12),
-    padding: const EdgeInsets.all(15),
+    padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)]),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.grey.shade200)),
     child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(_id != null ? "EDIT ACCOUNT" : "NEW ENTRY",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          const Divider(color: Colors.cyan),
+          Text((_id != null ? "EDIT ACCOUNT" : "NEW ENTRY").toUpperCase(),
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: Color(0xFF0F172A), letterSpacing: 0.3)),
+          const Divider(height: 16, color: Colors.cyan),
           _tf(_name, "NAME", readOnly: _id != null),
           Row(children: [
             Expanded(
@@ -173,24 +209,30 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
           _dd("GROUP", _grp, (v) => setState(() => _grp = v)),
           _dd("HEAD", _hd, (v) => setState(() => _hd = v)),
           _dd("GROUP WISE", _gw, (v) => setState(() => _gw = v)),
-          const SizedBox(height: 15),
+          const SizedBox(height: 12),
           Row(children: [
             Expanded(
-                child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey[800]),
+                child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.grey),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                     onPressed: _resetForm,
                     child: const Text("RESET",
-                        style: TextStyle(color: Colors.white)))),
+                        style: TextStyle(color: Colors.black87, fontSize: 10, fontWeight: FontWeight.bold)))),
             const SizedBox(width: 8),
             Expanded(
                 child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.cyan[700]),
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                     onPressed: () {
                       if (_isValid()) {
                         context.read<LedgerMasterBloc>().add(SaveData({
-                          "name": _name.text,
+                          "name": _name.text.trim(),
                           "opening_balance_credit": _cr.text,
                           "opening_balance_debit": _dr.text,
                           "group": _grp,
@@ -200,50 +242,51 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
                         _resetForm();
                       }
                     },
-                    child: Text(_id != null ? "UPDATE" : "SAVE",
-                        style: const TextStyle(color: Colors.white)))),
+                    child: Text((_id != null ? "UPDATE" : "SAVE").toUpperCase(),
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)))),
           ])
         ]),
   );
 
-  Widget _buildTableCard(double? h) => Container(
+  // --- High Density Table Matrix Canvas ---
+  Widget _buildTableCard(double? h, BoxConstraints rootConstraints) => Container(
     height: h,
-    margin: const EdgeInsets.fromLTRB(0, 12, 12, 12),
     decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
-        ]),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.grey.shade200)),
     child: Column(children: [
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.all(10.0),
         child: Row(children: [
           Expanded(
-              child: SizedBox(
-                  height: 40,
+              child: Container(
+                  height: 36,
+                  decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade200)
+                  ),
                   child: TextField(
                       controller: _search,
-                      onChanged: (v) =>
-                          context.read<LedgerMasterBloc>().add(LoadData(s: v)),
-                      decoration: InputDecoration(
-                          hintText: "Search Ledger Accounts...",
-                          hintStyle: const TextStyle(fontSize: 12),
-                          prefixIcon:
-                          const Icon(Icons.search, size: 18, color: Colors.cyan),
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4)),
-                          contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12))))),
-          const SizedBox(width: 12),
+                      style: const TextStyle(fontSize: 11),
+                      onChanged: (v) => context.read<LedgerMasterBloc>().add(LoadData(s: v.trim())),
+                      decoration: const InputDecoration(
+                          hintText: "Search Ledger Accounts Registry...",
+                          hintStyle: TextStyle(fontSize: 11, color: Colors.grey),
+                          prefixIcon: Icon(Icons.search_rounded, size: 14, color: Colors.blueGrey),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.only(bottom: 12))))),
+          const SizedBox(width: 10),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF263238),
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
-            icon: const Icon(Icons.date_range, color: Colors.cyanAccent, size: 18),
-            label: const Text("PRINT RANGE",
-                style: TextStyle(color: Colors.white, fontSize: 11)),
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
+            icon: const Icon(Icons.date_range_rounded, color: Colors.cyanAccent, size: 14),
+            label: const Text("PRINT RANGE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
             onPressed: _showPicker,
           ),
         ]),
@@ -252,21 +295,22 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
         child: BlocBuilder<LedgerMasterBloc, LedgerState>(
             builder: (context, state) {
               if (state is LLoading) {
-                return const Center(child: CircularProgressIndicator(color: Colors.cyan));
+                return const Center(child: CircularProgressIndicator(color: Colors.cyan, strokeWidth: 1.5));
               }
               if (state is LLoaded) {
-                return LayoutBuilder(builder: (context, constraints) {
+                return LayoutBuilder(builder: (context, tableConstraints) {
+                  final finalConstraints = tableConstraints.maxWidth > 0 ? tableConstraints : rootConstraints;
                   return SingleChildScrollView(
                     scrollDirection: Axis.vertical,
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      constraints: BoxConstraints(minWidth: finalConstraints.maxWidth),
                       child: DataTable(
                         columnSpacing: 0,
-                        horizontalMargin: 16,
-                        headingRowHeight: 45,
-                        dataRowHeight: 50,
-                        headingRowColor:
-                        MaterialStateProperty.all(const Color(0xFF263238)),
+                        horizontalMargin: 12,
+                        headingRowHeight: 34,
+                        dataRowMinHeight: 36,
+                        dataRowMaxHeight: 36,
+                        headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
                         columns: [
                           _profColumn("NAME", flex: 3),
                           _profColumn("GROUP", flex: 2),
@@ -277,34 +321,33 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
                         ],
                         rows: state.data.map((e) {
                           String time = e['updated_at'] != null
-                              ? DateFormat('HH:mm')
-                              .format(DateTime.parse(e['updated_at']).toLocal())
+                              ? DateFormat('HH:mm').format(DateTime.parse(e['updated_at']).toLocal())
                               : '--';
 
                           return DataRow(cells: [
-                            DataCell(_cellText(e['name'], bold: true, flex: 3, constraints: constraints)),
-                            DataCell(_cellText(e['group'] ?? '', flex: 2, constraints: constraints)),
-                            DataCell(_cellText(e['opening_balance_credit'].toString(), color: Colors.green, flex: 1.5, constraints: constraints)),
-                            DataCell(_cellText(e['opening_balance_debit'].toString(), color: Colors.red, flex: 1.5, constraints: constraints)),
-                            DataCell(_cellText(time, flex: 1.2, constraints: constraints)),
+                            DataCell(_cellText(e['name'] ?? '', bold: true, flex: 3, constraints: finalConstraints)),
+                            DataCell(_cellText(e['group'] ?? '', flex: 2, constraints: finalConstraints)),
+                            DataCell(_cellText(e['opening_balance_credit']?.toString() ?? '0.00', color: Colors.green, flex: 1.5, constraints: finalConstraints)),
+                            DataCell(_cellText(e['opening_balance_debit']?.toString() ?? '0.00', color: Colors.redAccent, flex: 1.5, constraints: finalConstraints)),
+                            DataCell(_cellText(time, flex: 1.2, constraints: finalConstraints)),
                             DataCell(SizedBox(
-                              width: (constraints.maxWidth * (1.2 / 10.4)),
+                              width: (finalConstraints.maxWidth * (1.2 / 10.4)),
                               child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
-                                  // ✅ Edit Icon Logic: Hide if SALES or PURCHASE
                                   if (e['group'] != "SALES" && e['group'] != "PURCHASE")
                                     InkWell(
                                       onTap: () => _fill(e),
-                                      child: const Icon(Icons.edit, color: Colors.blue, size: 18),
+                                      child: const Icon(Icons.edit_outlined, color: Colors.orange, size: 14),
                                     )
                                   else
-                                    const SizedBox(width: 18), // Space maintain karne ke liye jab icon hide ho
+                                    const SizedBox(width: 14),
 
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 10),
 
                                   InkWell(
                                     onTap: () => _printPdf(context, d: e),
-                                    child: const Icon(Icons.print, color: Colors.orange, size: 18),
+                                    child: const Icon(Icons.print_outlined, color: Colors.blueAccent, size: 14),
                                   ),
                                 ],
                               ),
@@ -321,7 +364,7 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
     ]),
   );
 
-  // --- Helper Functions ---
+  // --- Core Functional Micro Helpers ---
 
   DataColumn _profColumn(String label, {required double flex}) {
     return DataColumn(
@@ -329,9 +372,10 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
             flex: (flex * 10).toInt(),
             child: Text(label,
                 style: const TextStyle(
-                    color: Colors.cyanAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold))));
+                    color: Color(0xFF475569),
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.2))));
   }
 
   Widget _cellText(String text,
@@ -345,36 +389,39 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
               fontSize: 11,
-              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-              color: color ?? const Color(0xFF424242))),
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+              color: color ?? const Color(0xFF1E293B))),
     );
   }
 
   Widget _tf(TextEditingController c, String l,
       {bool readOnly = false, bool isNum = false, Function(String)? onCh}) =>
       Padding(
-        padding: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.only(bottom: 8),
         child: TextFormField(
             controller: c,
             readOnly: readOnly,
             onChanged: onCh,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
             keyboardType: isNum ? TextInputType.number : TextInputType.text,
             decoration: InputDecoration(
                 labelText: l,
-                labelStyle: const TextStyle(fontSize: 11),
+                labelStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey),
                 border: const OutlineInputBorder(),
                 filled: readOnly,
-                fillColor: readOnly ? Colors.grey[200] : Colors.white,
+                fillColor: readOnly ? const Color(0xFFF1F5F9) : Colors.white,
                 isDense: true,
                 contentPadding: const EdgeInsets.all(10))),
       );
 
   Widget _dd(String l, String? v, Function(String?) onCh) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.only(bottom: 8),
     child: DropdownButtonFormField<String>(
         value: v,
+        style: const TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.w500),
         decoration: InputDecoration(
             labelText: l,
+            labelStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey),
             border: const OutlineInputBorder(),
             isDense: true,
             contentPadding: const EdgeInsets.all(10)),

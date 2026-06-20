@@ -13,18 +13,26 @@ class AuthRemoteDataSource {
       "/api/auth/login/",
       isPublic: true,
       data: {
-        "login": username,
+        "username": username,
         "password": password,
       },
     );
 
-    if (response.data['success'] == true) {
-      return AuthModel.fromJson(response.data['data']);
-    } else {
-      throw Exception(response.data['message'] ?? "Login Failed");
-    }
-  }
+    print("login response $response");
 
+    final responseData = response.data;
+
+    if (responseData != null) {
+      if (responseData['success'] == true && responseData['data'] != null) {
+        return AuthModel.fromJson(responseData['data']);
+      } else if (responseData['access'] != null) {
+        return AuthModel.fromJson(responseData);
+      }
+    }
+
+    // Agar bilkul hi empty response ho tabhi exception throw hoga
+    throw Exception(responseData?['message'] ?? responseData?['errors']?.toString() ?? "Login Failed");
+  }
   Future<void> updateFCMToken(String fcmToken) async {
     await apiClient.post(
       "/api/user/update-fcm-token/",

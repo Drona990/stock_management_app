@@ -1,11 +1,11 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-class InvoicePdfService {
+class InvoiceDCPdfService {
   static Future<pw.Document> generate({
     required pw.ImageProvider? logoImage,
     required Map<String, dynamic> data,
-    required bool isSales,
+    required String terminalMode, // 'INWARD', 'OUTWARD', or 'PROFORMA'
     required List<String> headings,
   }) async {
     final pdf = pw.Document();
@@ -21,21 +21,21 @@ class InvoicePdfService {
               child: pw.Column(
                 mainAxisSize: pw.MainAxisSize.min,
                 children: [
-                  // --- SECTION 1: HEADER ---
-                  _buildHeader(logoImage!, currentHeading),
+                  // 1. HEADER
+                  _buildHeader(logoImage!, currentHeading, terminalMode),
                   pw.Divider(thickness: 1, height: 1),
 
-                  // --- SECTION 2: PARTY DETAILS ---
-                  _buildDynamicConsigneeSection(data),
+                  // 2. PARTY DETAILS (FIXED FOR EMPTY/MISSING BACKEND MOBILE KEYS)
+                  _buildDynamicConsigneeSection(data, terminalMode),
                   pw.Divider(thickness: 1, height: 1),
 
-                  // --- SECTION 3: ITEMS TABLE ---
-                  _buildDynamicItemsTable(data['details'] ?? []),
+                  // 3. ITEMS TABLE
+                  _buildDynamicItemsTable(data['details'] ?? [], terminalMode),
 
-                  // --- SECTION 4: BILLING ---
-                  _buildDynamicBillingSection(data),
+                  // 4. BILLING/TOTALS SECTION
+                  _buildDynamicBillingSection(data, terminalMode),
 
-                  // --- SECTION 5: FOOTER ---
+                  // 5. FOOTER TERMS
                   _buildFooterTerms(),
                 ],
               ),
@@ -47,19 +47,22 @@ class InvoicePdfService {
     return pdf;
   }
 
-  static pw.Widget _buildHeader(pw.ImageProvider logo, String title) {
+  static pw.Widget _buildHeader(pw.ImageProvider logo, String title, String terminalMode) {
     return pw.Column(children: [
       pw.Padding(
         padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 8),
         child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
           pw.SizedBox(width: 40),
-          pw.Text("TAX INVOICE", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+              terminalMode == "PROFORMA" ? "PROFORMA INVOICE" : "DELIVERY CHALLAN",
+              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)
+          ),
           pw.Text(title, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
         ]),
       ),
       pw.Divider(thickness: 1, height: 1),
       pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        crossAxisAlignment:  pw.CrossAxisAlignment.center,
         children: [
           pw.Container(width: 100, height: 75, padding: const pw.EdgeInsets.all(5), child: pw.Image(logo, fit: pw.BoxFit.contain)),
           pw.Expanded(
@@ -83,15 +86,23 @@ class InvoicePdfService {
     ]);
   }
 
-  static pw.Widget _buildDynamicConsigneeSection(Map<String, dynamic> data) {
+  // ==========================================================================
+  // 🔍 FIXED: EXTRACTED MOBILE BOUNDARY SAFE MATRIX
+  // ==========================================================================
+  static pw.Widget _buildDynamicConsigneeSection(Map<String, dynamic> data, String terminalMode) {
     const double sectionHeight = 100;
 
-    String cleanMobile = (data['mobile_no'] ??
-        data['customer_mobile'] ??
-        data['shipping_mobile_no'] ??
-        data['mobile'] ??
-        "")
-        .toString();
+    // Strict multi-layer validation engine to block null exceptions
+    String validatedMobile = "NOT AVAILABLE";
+    if (data.containsKey('mobile_no') && data['mobile_no'] != null && data['mobile_no'].toString().trim().isNotEmpty) {
+      validatedMobile = data['mobile_no'].toString();
+    } else if (data.containsKey('customer_mobile') && data['customer_mobile'] != null) {
+      validatedMobile = data['customer_mobile'].toString();
+    } else if (data.containsKey('party_mobile') && data['party_mobile'] != null) {
+      validatedMobile = data['party_mobile'].toString();
+    } else if (data.containsKey('mobile') && data['mobile'] != null) {
+      validatedMobile = data['mobile'].toString();
+    }
 
     return pw.Container(
       decoration: const pw.BoxDecoration(
@@ -102,7 +113,7 @@ class InvoicePdfService {
       ),
       child: pw.Row(
         children: [
-          // --- LEFT SIDE: CONSIGNEE INFO ---
+          // --- LEFT SIDE: PARTY INFO ---
           pw.Expanded(
             flex: 5,
             child: pw.Container(
@@ -113,23 +124,25 @@ class InvoicePdfService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text("NAME & ADDRESS OF CONSIGNEE",
-                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                        pw.SizedBox(height: 3),
-                        pw.Text(data['name']?.toString().toUpperCase() ?? "",
-                            style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(data['address']?.toString() ?? "",
-                            style: const pw.TextStyle(fontSize: 7.5)),
-                      ]
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                          terminalMode == "PROFORMA" ? "NAME & ADDRESS OF CONSIGNEE" : "NAME & ADDRESS OF RECEIVER",
+                          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)
+                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Text(data['name']?.toString().toUpperCase() ?? "",
+                          style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                      pw.Text(data['address']?.toString() ?? "",
+                          style: const pw.TextStyle(fontSize: 7.5)),
+                    ],
                   ),
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text("GSTIN: ${data['gst_number'] ?? data['shipping_gst_no'] ?? data['gst_no'] ?? ''}",
+                      pw.Text("GSTIN: ${data['gst_number'] ?? data['gst_no'] ?? ''}",
                           style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
-                      pw.Text("MOBILE: $cleanMobile",
+                      pw.Text("MOBILE: $validatedMobile",
                           style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
@@ -138,7 +151,7 @@ class InvoicePdfService {
             ),
           ),
 
-          // --- RIGHT SIDE: INVOICE DETAILS ---
+          // --- RIGHT SIDE: METADATA COLUMN ---
           pw.Expanded(
             flex: 5,
             child: pw.Container(
@@ -148,9 +161,14 @@ class InvoicePdfService {
               ),
               child: pw.Column(
                 children: [
-                  _complexRow("Invoice No", data['billno'] ?? data['invoice_no'] ?? "", "DATE", data['billdate'] ?? data['invoice_date'] ?? ""),
+                  _complexRow(
+                      terminalMode == "PROFORMA" ? "Proforma No" : "Challan / DC No",
+                      data['billno'] ?? data['dc_no'] ?? "",
+                      "DATE",
+                      data['billdate'] ?? data['dc_date'] ?? ""
+                  ),
                   _complexRow("Cust.P.O :", data['purchase_order_no'] ?? "", "DATE", data['purchase_order_date'] ?? ""),
-                  _complexRow("D.C.NO :", data['dc_no'] ?? "", "DATE", data['dc_date'] ?? ""),
+                  _complexRow("REF. NO :", "", "DATE", ""),
                   _complexRow("DISPATCH :", data['dispatch'] ?? "", " ", ""),
                   _complexRow("EWB NO:", data['ewb_no'] ?? data['ewb_number'] ?? "", " ", "", isLast: true),
                 ],
@@ -204,16 +222,18 @@ class InvoicePdfService {
     );
   }
 
-  static pw.Widget _buildDynamicItemsTable(List<dynamic> items) {
-    const double slWidth = 35;
-    const double qtyWidth = 50;
-    const double priceWidth = 70;
-    const double amountWidth = 85;
-    const double hsnWidth = 80;
+  static pw.Widget _buildDynamicItemsTable(List<dynamic> items, String terminalMode) {
+    final bool isProforma = terminalMode == "PROFORMA";
+
+    const double slWidth = 30;
+    const double hsnWidth = 60;
+    const double qtyWidth = 45;
+    const double priceWidth = 65;
+    const double amountWidth = 75;
+    const double remarksWidth = 90;
 
     return pw.Column(
       children: [
-        // 1. HEADER
         pw.Container(
           decoration: const pw.BoxDecoration(
               border: pw.Border(bottom: pw.BorderSide(width: 1), top: pw.BorderSide(width: 1))
@@ -223,22 +243,20 @@ class InvoicePdfService {
             _cell("DESCRIPTION", flex: 1, b: true),
             _cell("HSN CODE", width: hsnWidth, b: true),
             _cell("QTY", width: qtyWidth, b: true),
-            _cell("PRICE", width: priceWidth, b: true),
-            _cell("AMOUNT", width: amountWidth, b: true, isLast: true),
+            _cell("PRICE/QTY", width: priceWidth, b: true),
+            _cell("AMOUNT", width: amountWidth, b: true, isLast: isProforma),
+            if (!isProforma) _cell("REMARKS", width: remarksWidth, b: true, isLast: true),
           ]),
         ),
-
-        // 2. DATA ROWS
         ...items.map((i) => pw.Row(children: [
           _cell(i['sno']?.toString() ?? "", width: slWidth),
           _cell(i['product_name'] ?? "", flex: 1, align: pw.TextAlign.left),
           _cell(i['hsncode']?.toString() ?? " ", width: hsnWidth),
           _cell(i['qty']?.toString() ?? "0", width: qtyWidth),
           _cell(i['rate']?.toString() ?? "0", width: priceWidth),
-          _cell(i['total']?.toString() ?? i['amount']?.toString() ?? "0", width: amountWidth, isLast: true),
+          _cell(i['amount']?.toString() ?? i['total']?.toString() ?? "0", width: amountWidth, isLast: isProforma),
+          if (!isProforma) _cell(i['remarks']?.toString() ?? " ", width: remarksWidth, align: pw.TextAlign.left, isLast: true),
         ])),
-
-        // 3. TABLE FILLER CLOSURE (Fixed isLast issue here)
         pw.Container(
           height: 150,
           decoration: const pw.BoxDecoration(
@@ -252,7 +270,8 @@ class InvoicePdfService {
               _cell("", width: hsnWidth),
               _cell("", width: qtyWidth),
               _cell("", width: priceWidth),
-              _cell("", width: amountWidth, isLast: true), // Fixed to strict boolean literal
+              _cell("", width: amountWidth, isLast: isProforma),
+              if (!isProforma) _cell("", width: remarksWidth, isLast: true),
             ],
           ),
         ),
@@ -260,7 +279,9 @@ class InvoicePdfService {
     );
   }
 
-  static pw.Widget _buildDynamicBillingSection(Map<String, dynamic> data) {
+  static pw.Widget _buildDynamicBillingSection(Map<String, dynamic> data, String terminalMode) {
+    final bool isProforma = terminalMode == "PROFORMA";
+
     return pw.Row(children: [
       pw.Expanded(
         flex: 3,
@@ -271,12 +292,11 @@ class InvoicePdfService {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text("RUPEES IN WORDS:", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+              pw.Text("VALUE IN WORDS:", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
               pw.Text(data['amtin_words'] ?? "", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 10),
-              // Fixed: Swapped custom material style widgets with clean pw.TextStyle declarations
-              pw.Text("BANK: STATE BANK OF INDIA | A/C: 54009859972", style: pw.TextStyle(fontSize: 7)),
-              pw.Text("IFS CODE: SBIN0040552 | ADDRESS: SINGASANDRA", style: pw.TextStyle(fontSize: 7)),
+              pw.Text("BANK: STATE BANK OF INDIA | A/C: 54009859972", style: const pw.TextStyle(fontSize: 7)),
+              pw.Text("IFS CODE: SBIN0040552 | ADDRESS: SINGASANDRA", style: const pw.TextStyle(fontSize: 7)),
             ],
           ),
         ),
@@ -284,10 +304,14 @@ class InvoicePdfService {
       pw.Expanded(
         flex: 2,
         child: pw.Column(children: [
-          _calcRow("Total", data['totalamount']?.toString() ?? data['total_base_amount']?.toString() ?? "0"),
-          _calcRow("CGST", data['cgst']?.toString() ?? "0"),
-          _calcRow("SGST", data['sgst']?.toString() ?? "0"),
-          _calcRow("G.Total", data['grand_totamt']?.toString() ?? data['grand_total']?.toString() ?? "0", b: true),
+          _calcRow("Subtotal", data['totalamount']?.toString() ?? data['total_base_amount']?.toString() ?? "0"),
+          if (isProforma) ...[
+            _calcRow("CGST", data['cgst']?.toString() ?? "0"),
+            _calcRow("SGST", data['sgst']?.toString() ?? "0"),
+            _calcRow("IGST", data['igst']?.toString() ?? "0"),
+          ],
+          _calcRow("Forwarding", data['forwading_charge']?.toString() ?? "0"),
+          _calcRow("Total Value", data['grand_totamt']?.toString() ?? data['grand_total']?.toString() ?? "0", b: true),
         ]),
       ),
     ]);
@@ -318,11 +342,11 @@ class InvoicePdfService {
                 children: [
                   pw.Text("TERMS & CONDITIONS:", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
                   pw.SizedBox(height: 2),
-                  pw.Text("1. Good once sold will not be taken back or exchange", style: const pw.TextStyle(fontSize: 6)),
+                  pw.Text("1. Goods once sold will not be taken back or exchanged.", style: const pw.TextStyle(fontSize: 6)),
                   pw.Text("2. Interest @24% will be charged if not paid within due period.", style: const pw.TextStyle(fontSize: 6)),
                   pw.Text("3. All Disputes Subject to Bangalore Jurisdiction Only.", style: const pw.TextStyle(fontSize: 6)),
-                  pw.Text("4. All Payment Should Be Made By A/c Payee Cheque/D.D Only", style: const pw.TextStyle(fontSize: 6)),
-                  pw.Text("5. Our Risk/Responsibility Ceases Once Goods Leave Our Premises", style: const pw.TextStyle(fontSize: 6)),
+                  pw.Text("4. All Payment Should Be Made By A/c Payee Cheque/D.D Only.", style: const pw.TextStyle(fontSize: 6)),
+                  pw.Text("5. Our Risk/Responsibility Ceases Once Goods Leave Our Premises.", style: const pw.TextStyle(fontSize: 6)),
                 ],
               ),
             ),

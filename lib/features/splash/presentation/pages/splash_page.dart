@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
-import '../../../../core/utils/routes_name.dart';
-import '../../../../core/utils/websocket/websocket_service.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -21,18 +19,26 @@ class _SplashPageState extends State<SplashPage> {
     _startAppFlow();
   }
 
-
   Future<void> _startAppFlow() async {
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
-    context.go('/dashboard');
-  }
+    // 🌟 FIXED: Ab splash direct dashboard nahi bhejega, pehle roles validation storage se verify karega
+    if (GetIt.I.isRegistered<FlutterSecureStorage>()) {
+      final storage = GetIt.I<FlutterSecureStorage>();
+      final token = await storage.read(key: 'access_token');
+      final role = await storage.read(key: 'user_role');
 
-  void _logoutAndKick(BuildContext context) async {
-    final storage = GetIt.I<FlutterSecureStorage>();
-    await storage.deleteAll();
-    context.go(AppRoutes.login);
+      if (token != null && token.isNotEmpty) {
+        if (role?.toLowerCase() == 'staff') {
+          context.go('/dc_terminal');
+          return;
+        }
+        context.go('/dashboard');
+        return;
+      }
+    }
+    context.go('/login');
   }
 
   @override
@@ -59,7 +65,6 @@ class _SplashPageState extends State<SplashPage> {
               ),
             ),
           ),
-
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -98,7 +103,6 @@ class _SplashPageState extends State<SplashPage> {
                     );
                   },
                 ),
-
                 const SizedBox(height: 30),
                 const Text(
                   "SVENSKA SYSTEMS",
@@ -136,4 +140,3 @@ class _SplashPageState extends State<SplashPage> {
     );
   }
 }
-
