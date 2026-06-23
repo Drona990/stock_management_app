@@ -25,6 +25,12 @@ class _FinancialNoteReportScreenState extends State<FinancialNoteReportScreen> {
     _triggerFetch();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   void _triggerFetch() {
     context.read<NoteTxBloc>().add(LoadNotesRegistryEvent(
       search: _searchCtrl.text.trim(),
@@ -138,7 +144,7 @@ class _FinancialNoteReportScreenState extends State<FinancialNoteReportScreen> {
               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
               onChanged: (v) => _triggerFetch(),
               decoration: const InputDecoration(
-                hintText: "SEARCH LOGS BY VOUCHER NO, INVOICE OR PARTY...",
+                hintText: "SEARCH LOGS BY SERIAL NO, NOTE NO OR PARTY...",
                 hintStyle: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold),
                 prefixIcon: Icon(Icons.search_rounded, size: 14, color: Colors.blueGrey),
                 border: InputBorder.none,
@@ -190,7 +196,7 @@ class _FinancialNoteReportScreenState extends State<FinancialNoteReportScreen> {
                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
                 onChanged: (v) => _triggerFetch(),
                 decoration: const InputDecoration(
-                  hintText: "SEARCH LOGS BY NOTE NO, ORIGINAL INVOICE REF, PARTY NAME...",
+                  hintText: "SEARCH LOGS BY AUTO SERIAL NO, NOTE REF, PARTY NAME...",
                   hintStyle: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.2),
                   prefixIcon: Icon(Icons.search_rounded, size: 14, color: Colors.blueGrey),
                   border: InputBorder.none,
@@ -226,6 +232,7 @@ class _FinancialNoteReportScreenState extends State<FinancialNoteReportScreen> {
       ),
     );
   }
+
   Widget _buildRegistryTableGrid(bool isMobile) {
     return BlocBuilder<NoteTxBloc, NoteTxState>(
       builder: (context, state) {
@@ -259,6 +266,9 @@ class _FinancialNoteReportScreenState extends State<FinancialNoteReportScreen> {
               Color tagColor = isDebit ? const Color(0xFF912B2B) : const Color(0xFF1E5631);
 
               String reason = (note['reason'] ?? '').toString().replaceAll('_', ' ').toUpperCase();
+
+              // 🌟 DYNAMIC TRACKING SYNC: Safely extracts backend sequence increment id token maps
+              String noteSerialNo = note['note_bill_no']?.toString() ?? 'N/A';
 
               // 📱 HIGH DENSITY MOBILE VS DESKTOP RESPONSIVE CARD LOOKUP
               return Container(
@@ -297,6 +307,9 @@ class _FinancialNoteReportScreenState extends State<FinancialNoteReportScreen> {
                       spacing: 4,
                       runSpacing: 2,
                       children: [
+                        // 🌟 INJECTED: Displays explicit sequential series tracker inside wrap layout
+                        _infoLabel("SERIAL NO", noteSerialNo, isCounter: true),
+                        _dividerDot(),
                         _infoLabel("NOTE NO", note['note_no'] ?? 'N/A'),
                         _dividerDot(),
                         _infoLabel("DATE", note['note_date'] ?? 'N/A'),
@@ -358,6 +371,9 @@ class _FinancialNoteReportScreenState extends State<FinancialNoteReportScreen> {
                           const SizedBox(height: 4),
                           Row(
                             children: [
+                              // 🌟 INJECTED: Displays clear numeric continuous series tracker on desktop views rows
+                              _infoLabel("SERIAL NO", noteSerialNo, isCounter: true),
+                              _dividerDot(),
                               _infoLabel("NOTE NO", note['note_no'] ?? 'N/A'),
                               _dividerDot(),
                               _infoLabel("DATE", note['note_date'] ?? 'N/A'),
@@ -419,13 +435,20 @@ class _FinancialNoteReportScreenState extends State<FinancialNoteReportScreen> {
     );
   }
 
-  Widget _infoLabel(String label, String value, {bool highlight = false}) {
+  Widget _infoLabel(String label, String value, {bool highlight = false, bool isCounter = false}) {
+    Color labelColor = Colors.grey.shade600;
+    if (isCounter) {
+      labelColor = const Color(0xFF16A085); // Sharp green identifier for automatic tracking indices
+    } else if (highlight) {
+      labelColor = const Color(0xFF0284C7);
+    }
+
     return Text(
       "$label: ${value.toUpperCase()}",
       style: TextStyle(
           fontSize: 8.5,
-          color: highlight ? const Color(0xFF0284C7) : Colors.grey.shade600,
-          fontWeight: highlight ? FontWeight.w900 : FontWeight.w600,
+          color: labelColor,
+          fontWeight: (highlight || isCounter) ? FontWeight.w900 : FontWeight.w600,
           letterSpacing: 0.1
       ),
     );

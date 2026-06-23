@@ -23,7 +23,6 @@ class FinancialNoteRepository {
     return response.data as Map<String, dynamic>;
   }
 
-  // ✅ NEW: Saare generated notes fetch karne ke liye (With Search & Type Filters)
   Future<List<dynamic>> fetchNotesRegistry({String? search, String? noteType}) async {
     try {
       final response = await apiClient.get(
@@ -33,8 +32,6 @@ class FinancialNoteRepository {
           if (noteType != null && noteType != 'ALL') 'note_type': noteType,
         },
       );
-
-      // Handle Django DRF Pagination Metadata Matrix safely
       if (response.data is Map && response.data['results'] != null) {
         return response.data['results'] as List<dynamic>;
       }
@@ -48,32 +45,27 @@ class FinancialNoteRepository {
     }
   }
 }
+
 // ==========================================================================
 // BLOC LAYER
 // ==========================================================================
-// --- EVENTS ---
 abstract class NoteTxEvent {}
 class SaveNoteEvent extends NoteTxEvent { final Map<String, dynamic> data; SaveNoteEvent(this.data); }
-// ✅ New Event to trigger directory load
 class LoadNotesRegistryEvent extends NoteTxEvent {
   final String? search; final String? noteType;
   LoadNotesRegistryEvent({this.search, this.noteType});
 }
 
-// --- STATES ---
 abstract class NoteTxState {}
 class NoteTxInitial extends NoteTxState {}
 class NoteTxLoading extends NoteTxState {}
 class NoteTxSuccess extends NoteTxState { final Map<String, dynamic> responseData; NoteTxSuccess(this.responseData); }
 class NoteTxError extends NoteTxState { final String message; NoteTxError(this.message); }
-// ✅ New State to hold history records
 class NoteRegistryLoadedState extends NoteTxState { final List<dynamic> notesList; NoteRegistryLoadedState(this.notesList); }
 
-// --- BLOC EXECUTOR ---
 class NoteTxBloc extends Bloc<NoteTxEvent, NoteTxState> {
   final FinancialNoteRepository repository;
   NoteTxBloc(this.repository) : super(NoteTxInitial()) {
-
     on<SaveNoteEvent>((event, emit) async {
       emit(NoteTxLoading());
       try {
@@ -81,8 +73,6 @@ class NoteTxBloc extends Bloc<NoteTxEvent, NoteTxState> {
         emit(NoteTxSuccess(savedResponse));
       } catch (e) { emit(NoteTxError(e.toString())); }
     });
-
-    // ✅ New Registry Load Handler
     on<LoadNotesRegistryEvent>((event, emit) async {
       emit(NoteTxLoading());
       try {
@@ -126,7 +116,7 @@ class NoteRowController {
 }
 
 // ==========================================================================
-// MAIN RE-ENGINEERED PRESENTATION TERMINAL CANVAS
+// MAIN PRESENTATION CANCEL CANVAS SURFACE
 // ==========================================================================
 class CreditDebitNoteTerminalScreen extends StatefulWidget {
   const CreditDebitNoteTerminalScreen({super.key});
@@ -139,10 +129,10 @@ class _CreditDebitNoteTerminalScreenState extends State<CreditDebitNoteTerminalS
   String _noteMode = "DEBIT_NOTE";
   String _selectedReason = "DAMAGED_GOODS";
 
-  final _docNoCtrl = TextEditingController(text: "AUTO-ASSIGNED");
-  final _docDateCtrl = TextEditingController(text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
+  final _docNoCtrl = TextEditingController(); // 🌟 Target sequential binder
+  final _docDateCtrl = TextEditingController(text: DateFormat('dd-MM-yyyy').format(DateTime.now()));
   final _invRefCtrl = TextEditingController();
-  final _invDateCtrl = TextEditingController(text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
+  final _invDateCtrl = TextEditingController(text: DateFormat('dd-MM-yyyy').format(DateTime.now()));
   final _ewbNoCtrl = TextEditingController();
   final _dispatchCtrl = TextEditingController();
 
@@ -155,6 +145,8 @@ class _CreditDebitNoteTerminalScreenState extends State<CreditDebitNoteTerminalS
 
   final _amtInWordsCtrl = TextEditingController(text: "ZERO RUPEES ONLY");
   double totalPcs = 0, taxableAmt = 0, totalTax = 0, grandTotal = 0, roundOff = 0;
+
+  String? _selectedMasterType;
   int? _selectedMasterId;
 
   List<NoteRowController> rows = [NoteRowController(sno: 1)];
@@ -171,15 +163,39 @@ class _CreditDebitNoteTerminalScreenState extends State<CreditDebitNoteTerminalS
   void initState() {
     super.initState();
     _loadMasters();
+    _fetchNextNoteCounter(); // 👈 Sequential counter initial load preload hook
+  }
+
+  @override
+  void dispose() {
+    _docNoCtrl.dispose(); _docDateCtrl.dispose(); _invRefCtrl.dispose(); _invDateCtrl.dispose();
+    _ewbNoCtrl.dispose(); _dispatchCtrl.dispose(); _nameCtrl.dispose(); _addrCtrl.dispose();
+    _cityCtrl.dispose(); _pinCtrl.dispose(); _gstNoCtrl.dispose(); _narrationCtrl.dispose();
+    _amtInWordsCtrl.dispose();
+    super.dispose();
+  }
+
+  // 🟢 NEW ACCURATE FEATURE: Fetches upcoming unique index counters dynamically from views actions
+  Future<void> _fetchNextNoteCounter() async {
+    try {
+      final response = await sl<ApiClient>().get(
+        '/api/transactions/financial_notes/next_note_number/',
+        query: {'note_type': _noteMode},
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        setState(() {
+          _docNoCtrl.text = response.data['next_note_bill_no'].toString();
+        });
+      }
+    } catch (e) {
+      debugPrint("Returns note tracker matrix sequential pre-load execution fail: $e");
+    }
   }
 
   void _loadMasters() {
     context.read<UomBloc>().add(LoadUoms());
-    if (_noteMode == "DEBIT_NOTE") {
-      context.read<SupplierBloc>().add(LoadSuppliers());
-    } else {
-      context.read<CustomerBloc>().add(LoadCustomers());
-    }
+    context.read<SupplierBloc>().add(LoadSuppliers());
+    context.read<CustomerBloc>().add(LoadCustomers());
   }
 
   void _calculateTotals() {
@@ -224,17 +240,27 @@ class _CreditDebitNoteTerminalScreenState extends State<CreditDebitNoteTerminalS
 
   void _resetForm() {
     setState(() {
-      _docNoCtrl.text = "AUTO-ASSIGNED";
-      _docDateCtrl.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      _docDateCtrl.text = DateFormat('dd-MM-yyyy').format(DateTime.now());
       _invRefCtrl.clear();
-      _invDateCtrl.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      _invDateCtrl.text = DateFormat('dd-MM-yyyy').format(DateTime.now());
       _ewbNoCtrl.clear(); _dispatchCtrl.clear();
       _selectedMasterId = null;
+      _selectedMasterType = null;
       _nameCtrl.clear(); _addrCtrl.clear(); _cityCtrl.clear(); _pinCtrl.clear(); _gstNoCtrl.clear(); _narrationCtrl.clear();
       rows = [NoteRowController(sno: 1)];
       totalPcs = 0; taxableAmt = 0; totalTax = 0; grandTotal = 0; roundOff = 0;
       _amtInWordsCtrl.text = "ZERO RUPEES ONLY";
     });
+    _fetchNextNoteCounter(); // 👈 Forms reset numeric counter load sequence
+  }
+
+  String _formatToBackendDate(String ddMMyyyy) {
+    try {
+      DateTime parsed = DateFormat('dd-MM-yyyy').parse(ddMMyyyy);
+      return DateFormat('yyyy-MM-dd').format(parsed);
+    } catch (_) {
+      return DateTime.now().toString().split(" ")[0];
+    }
   }
 
   void _dispatchSave() {
@@ -245,9 +271,9 @@ class _CreditDebitNoteTerminalScreenState extends State<CreditDebitNoteTerminalS
 
     final payload = {
       "note_type": _noteMode,
-      "note_date": _docDateCtrl.text,
+      "note_date": _formatToBackendDate(_docDateCtrl.text),
       "original_invoice_no": _invRefCtrl.text,
-      "original_invoice_date": _invDateCtrl.text,
+      "original_invoice_date": _formatToBackendDate(_invDateCtrl.text),
       "reason": _selectedReason,
       "ewb_no": _ewbNoCtrl.text,
       "dispatch": _dispatchCtrl.text,
@@ -265,7 +291,10 @@ class _CreditDebitNoteTerminalScreenState extends State<CreditDebitNoteTerminalS
       "grand_total": grandTotal,
       "amtin_words": _amtInWordsCtrl.text,
       "narration": _narrationCtrl.text,
-      if (_noteMode == "DEBIT_NOTE") "supplier": _selectedMasterId else "customer": _selectedMasterId,
+
+      if (_selectedMasterType == "SUPPLIER") "supplier": _selectedMasterId,
+      if (_selectedMasterType == "CUSTOMER") "customer": _selectedMasterId,
+
       "details": rows.map((r) => {
         "sno": r.sno,
         "product_name": r.productCtrl.text,
@@ -407,7 +436,7 @@ class _CreditDebitNoteTerminalScreenState extends State<CreditDebitNoteTerminalS
 
   Widget _buildInvoiceSection() => Column(children: [
     Row(children: [
-      Expanded(child: _tf(_docNoCtrl, "NOTE NUMBER", readOnly: true)),
+      Expanded(child: _tf(_docNoCtrl, "NOTE NUMERIC NO *", readOnly: true)), // 🌟 Displays tracking serial integers
       const SizedBox(width: 8),
       Expanded(child: _dateTf(_docDateCtrl, "NOTE ISSUE DATE")),
     ]),
@@ -548,28 +577,81 @@ class _CreditDebitNoteTerminalScreenState extends State<CreditDebitNoteTerminalS
     onChanged: (v) { if (v != null) setState(() => _selectedReason = v); },
   );
 
+  // 🌟 SAFE POINTER MATCH SYNC DROPDOWN
   Widget _masterDropdown() {
-    if (_noteMode == "DEBIT_NOTE") {
-      return BlocBuilder<SupplierBloc, SupplierState>(builder: (context, state) {
-        final List<SupplierEntity> list = (state is SupplierLoaded) ? state.suppliers : [];
-        return DropdownButtonFormField<SupplierEntity>(
-          value: _selectedMasterId == null ? null : list.where((e) => e.id == _selectedMasterId).firstOrNull,
-          decoration: const InputDecoration(labelText: "SELECT SUPPLIER ACCOUNT DIRECTORY", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
-          items: list.map((s) => DropdownMenuItem(value: s, child: Text(s.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
-          onChanged: (v) { if (v != null) setState(() { _selectedMasterId = v.id; _nameCtrl.text = v.name; _addrCtrl.text = v.address; _cityCtrl.text = v.city; _pinCtrl.text = v.pinCode; _gstNoCtrl.text = v.gstNumber; _calculateTotals(); }); },
-        );
-      });
-    } else {
-      return BlocBuilder<CustomerBloc, CustomerState>(builder: (context, state) {
-        final List<CustomerEntity> list = (state is CustomerLoaded) ? state.customers : [];
-        return DropdownButtonFormField<CustomerEntity>(
-          value: _selectedMasterId == null ? null : list.where((e) => e.id == _selectedMasterId).firstOrNull,
-          decoration: const InputDecoration(labelText: "SELECT CUSTOMER ACCOUNT DIRECTORY", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
-          items: list.map((c) => DropdownMenuItem(value: c, child: Text(c.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
-          onChanged: (v) { if (v != null) setState(() { _selectedMasterId = v.id; _nameCtrl.text = v.name; _addrCtrl.text = v.address; _cityCtrl.text = v.city; _pinCtrl.text = v.pincode; _gstNoCtrl.text = v.gstNo; _calculateTotals(); }); },
-        );
-      });
-    }
+    return _noteMode == "DEBIT_NOTE"
+        ? BlocBuilder<SupplierBloc, SupplierState>(builder: (context, state) {
+      final List<SupplierEntity> list = (state is SupplierLoaded) ? state.suppliers : [];
+
+      final List<DropdownMenuItem<String>> dropdownItems = list.map((s) => DropdownMenuItem(
+        value: "SUPPLIER_${s.id}",
+        child: Text(s.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+      )).toList();
+
+      String? selectionKey;
+      if (_selectedMasterId != null && _selectedMasterType == "SUPPLIER") {
+        selectionKey = "SUPPLIER_$_selectedMasterId";
+      }
+
+      return DropdownButtonFormField<String>(
+        value: selectionKey,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: "SELECT SUPPLIER ACCOUNT DIRECTORY *", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
+        items: dropdownItems,
+        onChanged: (v) {
+          if (v != null) {
+            final id = int.tryParse(v.split("_")[1]);
+            final match = list.firstWhere((e) => e.id == id);
+            setState(() {
+              _selectedMasterType = "SUPPLIER";
+              _selectedMasterId = match.id;
+              _nameCtrl.text = match.name;
+              _addrCtrl.text = match.address ?? "";
+              _cityCtrl.text = match.city ?? "";
+              _pinCtrl.text = match.pinCode ?? "";
+              _gstNoCtrl.text = match.gstNumber ?? "";
+              _calculateTotals();
+            });
+          }
+        },
+      );
+    })
+        : BlocBuilder<CustomerBloc, CustomerState>(builder: (context, state) {
+      final List<CustomerEntity> list = (state is CustomerLoaded) ? state.customers : [];
+
+      final List<DropdownMenuItem<String>> dropdownItems = list.map((c) => DropdownMenuItem(
+        value: "CUSTOMER_${c.id}",
+        child: Text(c.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
+      )).toList();
+
+      String? selectionKey;
+      if (_selectedMasterId != null && _selectedMasterType == "CUSTOMER") {
+        selectionKey = "CUSTOMER_$_selectedMasterId";
+      }
+
+      return DropdownButtonFormField<String>(
+        value: selectionKey,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: "SELECT CUSTOMER ACCOUNT DIRECTORY *", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
+        items: dropdownItems,
+        onChanged: (v) {
+          if (v != null) {
+            final id = int.tryParse(v.split("_")[1]);
+            final match = list.firstWhere((e) => e.id == id);
+            setState(() {
+              _selectedMasterType = "CUSTOMER";
+              _selectedMasterId = match.id;
+              _nameCtrl.text = match.name;
+              _addrCtrl.text = match.address;
+              _cityCtrl.text = match.city;
+              _pinCtrl.text = match.pincode;
+              _gstNoCtrl.text = match.gstNo;
+              _calculateTotals();
+            });
+          }
+        },
+      );
+    });
   }
 
   Widget _uomDropdown(int i) => BlocBuilder<UomBloc, UomState>(builder: (context, state) {
@@ -606,7 +688,7 @@ class _CreditDebitNoteTerminalScreenState extends State<CreditDebitNoteTerminalS
   );
 
   Widget _dateTf(TextEditingController c, String l) => TextFormField(
-    controller: c, readOnly: true, onTap: () async { DateTime? p = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101)); if (p != null) setState(() => c.text = DateFormat('yyyy-MM-dd').format(p)); },
+    controller: c, readOnly: true, onTap: () async { DateTime? p = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101)); if (p != null) setState(() => c.text = DateFormat('dd-MM-yyyy').format(p)); },
     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500), decoration: InputDecoration(labelText: l, labelStyle: TextStyle(color: Colors.blueGrey.shade700, fontSize: 10), prefixIcon: const Icon(Icons.calendar_today, size: 11), border: const OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
   );
 

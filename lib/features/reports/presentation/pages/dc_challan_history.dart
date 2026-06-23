@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -23,6 +24,12 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
   void initState() {
     super.initState();
     _triggerHistoryFetch();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   void _triggerHistoryFetch() {
@@ -72,7 +79,6 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
   @override
   Widget build(BuildContext context) {
     const Color industrialSlate = Color(0xFF1E293B);
-    // Dynamic media tracking system layout check
     double screenWidth = MediaQuery.of(context).size.width;
     bool isMobile = screenWidth < 650;
 
@@ -104,14 +110,12 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
   }
 
   Widget _buildTopFilteringBar(bool isMobile) {
-    // Common operational callback to prevent code duplication
     void handleTabChange(String? newMode) {
       if (newMode != null) {
         setState(() {
           _activeTabMode = newMode;
-          _searchCtrl.clear(); // Safe UI cleanup
+          _searchCtrl.clear();
         });
-        // Explicitly passing empty string for search to break any controller timing delays
         context.read<UnifiedTxBloc>().add(LoadUnifiedHistoryEvent(
           terminalMode: newMode,
           search: "",
@@ -128,7 +132,6 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
       child: isMobile
           ? Column(
         children: [
-          // 📱 Mobile Search Box
           Container(
             height: 35,
             decoration: BoxDecoration(
@@ -141,7 +144,7 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
               onChanged: (v) => _triggerHistoryFetch(),
               decoration: const InputDecoration(
-                hintText: "SEARCH LOGS BY DC, PO OR PARTY NAME...",
+                hintText: "SEARCH LOGS BY SERIAL NO, DC OR PARTY...",
                 hintStyle: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold),
                 prefixIcon: Icon(Icons.saved_search_rounded, size: 14, color: Colors.blueGrey),
                 border: InputBorder.none,
@@ -150,7 +153,6 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
             ),
           ),
           const SizedBox(height: 8),
-          // 📱 Mobile Full Width Dropdown
           Container(
             height: 35,
             width: double.infinity,
@@ -170,7 +172,7 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
                   DropdownMenuItem(value: "OUTWARD", child: Text("📤 DC OUTWARD REGISTER")),
                   DropdownMenuItem(value: "PROFORMA", child: Text("📄 PROFORMA ESTIMATES")),
                 ],
-                onChanged: handleTabChange, // ✅ Pointed to optimized central routine
+                onChanged: handleTabChange,
               ),
             ),
           ),
@@ -178,7 +180,6 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
       )
           : Row(
         children: [
-          // 💻 Desktop Wide Search Box
           Expanded(
             flex: 3,
             child: Container(
@@ -193,7 +194,7 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
                 onChanged: (v) => _triggerHistoryFetch(),
                 decoration: const InputDecoration(
-                  hintText: "SEARCH ENTRIES BY DC NO, PO REF, CONSUMER / SUPPLIER NAME...",
+                  hintText: "SEARCH ENTRIES BY AUTO NO, DC NO, PO REF, PARTY NAME...",
                   hintStyle: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.2),
                   prefixIcon: Icon(Icons.saved_search_rounded, size: 14, color: Colors.blueGrey),
                   border: InputBorder.none,
@@ -203,7 +204,6 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
             ),
           ),
           const SizedBox(width: 12),
-          // 💻 Desktop Dropdown Box
           Container(
             height: 34,
             padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -221,7 +221,7 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
                   DropdownMenuItem(value: "OUTWARD", child: Text("📤 DC OUTWARD REGISTER")),
                   DropdownMenuItem(value: "PROFORMA", child: Text("📄 PROFORMA ESTIMATES")),
                 ],
-                onChanged: handleTabChange, // ✅ Added missing fix for desktop mode too!
+                onChanged: handleTabChange,
               ),
             ),
           ),
@@ -229,6 +229,7 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
       ),
     );
   }
+
   Widget _buildRegistryContentGrid(bool isMobile) {
     return BlocBuilder<UnifiedTxBloc, UnifiedTxState>(
       builder: (context, state) {
@@ -263,7 +264,11 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
               if (_activeTabMode == "OUTWARD") statusColor = const Color(0xFFD97706);
               if (_activeTabMode == "PROFORMA") statusColor = const Color(0xFF0F4C81);
 
-              // 📱 HIGH DENSITY MOBILE VS DESKTOP RESPONSIVE CONTAINER CARD
+              // 🌟 DYNAMIC FIELD SYNC: Extracts sequential integer token maps safely
+              String autoSequentialNo = _activeTabMode == "PROFORMA"
+                  ? (rowItem['pi_bill_no']?.toString() ?? 'N/A')
+                  : (rowItem['dc_bill_no']?.toString() ?? 'N/A');
+
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
@@ -299,7 +304,10 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
                       spacing: 4,
                       runSpacing: 2,
                       children: [
-                        _metaLabel("DOC NO", rowItem['billno'] ?? rowItem['dc_no'] ?? 'N/A'),
+                        // 🌟 INJECTED: Displays clear numeric continuous series tracker on mobile view cards
+                        _metaLabel("SERIAL NO", autoSequentialNo, highlight: true),
+                        _bullet(),
+                        _metaLabel("DOC ID", rowItem['billno'] ?? rowItem['dc_no'] ?? 'N/A'),
                         _bullet(),
                         _metaLabel("DATE", rowItem['billdate'] ?? 'N/A'),
                         _bullet(),
@@ -358,7 +366,10 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
                           const SizedBox(height: 5),
                           Row(
                             children: [
-                              _metaLabel("DOC NO", rowItem['billno'] ?? rowItem['dc_no'] ?? 'N/A'),
+                              // 🌟 INJECTED: Displays clear numeric continuous series tracker on desktop views rows
+                              _metaLabel("SERIAL NO", autoSequentialNo, highlight: true),
+                              _bullet(),
+                              _metaLabel("DOC ID", rowItem['billno'] ?? rowItem['dc_no'] ?? 'N/A'),
                               _bullet(),
                               _metaLabel("DATE", rowItem['billdate'] ?? 'N/A'),
                               _bullet(),
@@ -420,13 +431,15 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
     );
   }
 
-  Widget _metaLabel(String label, String value, {bool active = false}) {
+  Widget _metaLabel(String label, String value, {bool active = false, bool highlight = false}) {
     return Text(
       "$label: ${value.toUpperCase()}",
       style: TextStyle(
           fontSize: 8.5,
-          color: active ? const Color(0xFF0284C7) : Colors.grey.shade600,
-          fontWeight: active ? FontWeight.w900 : FontWeight.bold,
+          color: highlight
+              ? const Color(0xFF16A085) // Sharp green for auto sequential counters
+              : (active ? const Color(0xFF0284C7) : Colors.grey.shade600),
+          fontWeight: (active || highlight) ? FontWeight.w900 : FontWeight.bold,
           letterSpacing: 0.1
       ),
     );

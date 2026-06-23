@@ -15,13 +15,9 @@ import '../../../masters/presentation/pages/customer_master_screen.dart';
 import '../../../masters/presentation/pages/supplier_master_screen.dart';
 import '../../../masters/presentation/pages/uom_master_screen.dart';
 
-
 class UnifiedTransactionRepository {
   final ApiClient apiClient = sl<ApiClient>();
 
-  // ==========================================================================
-  // 📥 BLOCK 1: TRANSACTION SAVE ROUTINE
-  // ==========================================================================
   Future<Map<String, dynamic>> saveTransaction({
     required Map<String, dynamic> data,
     required String terminalMode,
@@ -38,9 +34,6 @@ class UnifiedTransactionRepository {
     return response.data as Map<String, dynamic>;
   }
 
-  // ==========================================================================
-  // 📥 BLOCK 2: UNIFIED AUDIT HISTORY FETCH (FIXED FOR CRASHES)
-  // ==========================================================================
   Future<List<dynamic>> fetchTransactionHistory({
     required String terminalMode,
     String? search,
@@ -65,13 +58,12 @@ class UnifiedTransactionRepository {
 
       if (response.data == null) return [];
 
-      // Safe Extraction: Agar data pagination dynamic wrapper 'results' me hai
       if (response.data is Map) {
         final Map<String, dynamic> bodyMap = response.data as Map<String, dynamic>;
         if (bodyMap.containsKey('results') && bodyMap['results'] != null) {
           return bodyMap['results'] as List<dynamic>;
         }
-        return []; // Agar map hai par results nahi hai
+        return [];
       }
 
       if (response.data is List) {
@@ -80,61 +72,45 @@ class UnifiedTransactionRepository {
 
       return [];
     } catch (e) {
-      // 🔥 FIX: Error hone par crash nahi hoga, silent return matrix set kar diya
       print("Repository caught history fetch error safety interceptor: $e");
       return [];
     }
   }
 }
 
-// ==========================================================================
-// INTEGRATED EVENTS
-// ==========================================================================
+// BLoC Architecture Classes
 abstract class UnifiedTxEvent {}
-
 class SaveUnifiedTxEvent extends UnifiedTxEvent {
   final Map<String, dynamic> data;
   final String terminalMode;
   SaveUnifiedTxEvent(this.data, this.terminalMode);
 }
-
 class LoadUnifiedHistoryEvent extends UnifiedTxEvent {
   final String terminalMode;
   final String? search;
   LoadUnifiedHistoryEvent({required this.terminalMode, this.search});
 }
 
-// ==========================================================================
-// INTEGRATED STATES
-// ==========================================================================
 abstract class UnifiedTxState {}
-
 class UnifiedTxInitial extends UnifiedTxState {}
 class UnifiedTxLoading extends UnifiedTxState {}
-
 class UnifiedTxSuccess extends UnifiedTxState {
   final Map<String, dynamic> responseData;
   UnifiedTxSuccess(this.responseData);
 }
-
 class UnifiedHistoryLoadedState extends UnifiedTxState {
   final List<dynamic> recordsList;
   UnifiedHistoryLoadedState(this.recordsList);
 }
-
 class UnifiedTxError extends UnifiedTxState {
   final String message;
   UnifiedTxError(this.message);
 }
 
-// ==========================================================================
-// ENGINE EXECUTOR (FIXED ERROR BOUNDARIES)
-// ==========================================================================
 class UnifiedTxBloc extends Bloc<UnifiedTxEvent, UnifiedTxState> {
   final UnifiedTransactionRepository repository;
 
   UnifiedTxBloc(this.repository) : super(UnifiedTxInitial()) {
-
     on<SaveUnifiedTxEvent>((event, emit) async {
       emit(UnifiedTxLoading());
       try {
@@ -162,42 +138,46 @@ class UnifiedTxBloc extends Bloc<UnifiedTxEvent, UnifiedTxState> {
     });
   }
 }
-// ==========================================================================
-// 3. ROW CONTROLLER (GST, CGST, SGST Re-injected with manual override)
-// ==========================================================================
+
 class UnifiedRowController {
   int sno;
   final productCtrl = TextEditingController();
   final hsnCtrl = TextEditingController();
   final qtyCtrl = TextEditingController(text: "0");
   final rateCtrl = TextEditingController(text: "0");
-  final cgstPCtrl = TextEditingController(text: "9"); // Default 9%
-  final sgstPCtrl = TextEditingController(text: "9"); // Default 9%
-  final igstPCtrl = TextEditingController(text: "18"); // Auto Calculated 18%
+  final cgstPCtrl = TextEditingController(text: "0");
+  final sgstPCtrl = TextEditingController(text: "0");
+  final igstPCtrl = TextEditingController(text: "0");
   final lineTotalCtrl = TextEditingController(text: "0.00");
-  final remarksCtrl = TextEditingController(text: "GOODS FOR DELIVERY");
+  final remarksCtrl = TextEditingController(text: "");
   String? selectedUom;
 
   UnifiedRowController({required this.sno});
 
-  void calculate() {
+  void calculate({required bool isProformaMode}) {
     double q = double.tryParse(qtyCtrl.text) ?? 0;
     double r = double.tryParse(rateCtrl.text) ?? 0;
-    double cP = double.tryParse(cgstPCtrl.text) ?? 0;
-    double sP = double.tryParse(sgstPCtrl.text) ?? 0;
-
-    // Dynamic IGST calculation based on manual CGST/SGST overrides
-    double iP = cP + sP;
-    igstPCtrl.text = iP.toStringAsFixed(0);
-
     double baseAmt = q * r;
-    double taxAmt = (baseAmt * iP / 100);
-    lineTotalCtrl.text = (baseAmt + taxAmt).toStringAsFixed(2);
+
+    if (isProformaMode) {
+      double cP = double.tryParse(cgstPCtrl.text) ?? 0;
+      double sP = double.tryParse(sgstPCtrl.text) ?? 0;
+      double iP = cP + sP;
+      igstPCtrl.text = iP.toStringAsFixed(0);
+
+      double taxAmt = (baseAmt * iP / 100);
+      lineTotalCtrl.text = (baseAmt + taxAmt).toStringAsFixed(2);
+    } else {
+      cgstPCtrl.text = "0";
+      sgstPCtrl.text = "0";
+      igstPCtrl.text = "0";
+      lineTotalCtrl.text = baseAmt.toStringAsFixed(2);
+    }
   }
 }
 
 // ==========================================================================
-// 4. MAIN TERMINAL SCREEN UI (Redesigned with Premium Industrial Form Layout)
+// 💻 MAIN TERMINAL INTERFACE UI (DUAL COPY CAPABILITY LOADED)
 // ==========================================================================
 class DynamicTerminalScreen extends StatefulWidget {
   const DynamicTerminalScreen({super.key});
@@ -209,17 +189,15 @@ class DynamicTerminalScreen extends StatefulWidget {
 class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
   String _terminalMode = "INWARD";
 
-  // --- Section 1: Document Parameters ---
   final _docNoCtrl = TextEditingController();
-  final _docDateCtrl = TextEditingController(text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
+  final _docDateCtrl = TextEditingController(text: DateFormat('dd-MM-yyyy').format(DateTime.now()));
   final _poNoCtrl = TextEditingController();
-  final _poDateCtrl = TextEditingController(text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
+  final _poDateCtrl = TextEditingController(text: DateFormat('dd-MM-yyyy').format(DateTime.now()));
   final _pkgCtrl = TextEditingController();
   final _dueDaysCtrl = TextEditingController(text: "0");
   final _ewbNoCtrl = TextEditingController();
   final _dispatchCtrl = TextEditingController();
 
-  // --- Section 2: Party Context ---
   final _nameCtrl = TextEditingController();
   final _addrCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
@@ -228,10 +206,12 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
   final _shipAddrCtrl = TextEditingController();
   final _accNoCtrl = TextEditingController();
 
-  // --- Section 3: Totals ---
   final _fwdChargeCtrl = TextEditingController(text: "0");
   final _amtInWordsCtrl = TextEditingController(text: "ZERO RUPEES ONLY");
   double totalPcs = 0, taxableAmt = 0, totalTax = 0, grandTotal = 0, roundOff = 0;
+
+  // Custom unique identifiers matrix tracking
+  String? _selectedMasterType;
   int? _selectedMasterId;
 
   List<UnifiedRowController> rows = [UnifiedRowController(sno: 1)];
@@ -256,27 +236,27 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
 
   void _loadMasters() {
     context.read<UomBloc>().add(LoadUoms());
-    if (_terminalMode == "INWARD") {
-      context.read<SupplierBloc>().add(LoadSuppliers());
-    } else {
-      context.read<CustomerBloc>().add(LoadCustomers());
-    }
+    context.read<SupplierBloc>().add(LoadSuppliers());
+    context.read<CustomerBloc>().add(LoadCustomers());
   }
 
   void _calculateTotals() {
     double p = 0, a = 0, tax = 0;
+    bool isProformaMode = _terminalMode == "PROFORMA";
 
     for (var r in rows) {
-      r.calculate();
+      r.calculate(isProformaMode: isProformaMode);
       double q = double.tryParse(r.qtyCtrl.text) ?? 0;
       double rt = double.tryParse(r.rateCtrl.text) ?? 0;
 
       p += q;
       a += (q * rt);
 
-      double rowTaxable = q * rt;
-      double rowTaxPercent = double.tryParse(r.igstPCtrl.text) ?? 0;
-      tax += (rowTaxable * rowTaxPercent / 100);
+      if (isProformaMode) {
+        double rowTaxable = q * rt;
+        double rowTaxPercent = double.tryParse(r.igstPCtrl.text) ?? 0;
+        tax += (rowTaxable * rowTaxPercent / 100);
+      }
     }
 
     double fwd = double.tryParse(_fwdChargeCtrl.text) ?? 0;
@@ -286,7 +266,7 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
     setState(() {
       totalPcs = p;
       taxableAmt = double.parse(a.toStringAsFixed(2));
-      totalTax = double.parse(tax.toStringAsFixed(2));
+      totalTax = isProformaMode ? double.parse(tax.toStringAsFixed(2)) : 0.0;
       double rawRoundOff = roundedTotal - sub;
       roundOff = double.parse(rawRoundOff.toStringAsFixed(2));
       grandTotal = roundedTotal;
@@ -302,21 +282,22 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
       lastDate: DateTime(2101),
     );
     if (picked != null) {
-      setState(() => controller.text = DateFormat('yyyy-MM-dd').format(picked));
+      setState(() => controller.text = DateFormat('dd-MM-yyyy').format(picked));
     }
   }
 
   void _resetForm() {
     setState(() {
       _docNoCtrl.clear();
-      _docDateCtrl.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      _docDateCtrl.text = DateFormat('dd-MM-yyyy').format(DateTime.now());
       _poNoCtrl.clear();
-      _poDateCtrl.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      _poDateCtrl.text = DateFormat('dd-MM-yyyy').format(DateTime.now());
       _pkgCtrl.clear();
       _dueDaysCtrl.text = "0";
       _ewbNoCtrl.clear();
       _dispatchCtrl.clear();
       _selectedMasterId = null;
+      _selectedMasterType = null;
       _nameCtrl.clear(); _addrCtrl.clear(); _cityCtrl.clear();
       _pinCtrl.clear(); _gstNoCtrl.clear(); _shipAddrCtrl.clear(); _accNoCtrl.clear();
       _fwdChargeCtrl.text = "0"; _amtInWordsCtrl.text = "ZERO RUPEES ONLY";
@@ -325,18 +306,27 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
     });
   }
 
+  String _formatToBackendDate(String ddMMyyyy) {
+    try {
+      DateTime parsed = DateFormat('dd-MM-yyyy').parse(ddMMyyyy);
+      return DateFormat('yyyy-MM-dd').format(parsed);
+    } catch (_) {
+      return DateTime.now().toString().split(" ")[0];
+    }
+  }
+
   void _dispatchSave() {
     if (_selectedMasterId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Select Party Profile!")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Select Party Profile!")));
       return;
     }
 
     final payload = {
-      "billdate": _docDateCtrl.text,
+      "billdate": _formatToBackendDate(_docDateCtrl.text),
       "purchase_order_no": _poNoCtrl.text,
-      "purchase_order_date": _poDateCtrl.text,
+      "purchase_order_date": _formatToBackendDate(_poDateCtrl.text),
       "dc_no": _terminalMode != "PROFORMA" ? _docNoCtrl.text : "",
-      "dc_date": _terminalMode != "PROFORMA" ? _docDateCtrl.text : null,
+      "dc_date": _terminalMode != "PROFORMA" ? _formatToBackendDate(_docDateCtrl.text) : null,
       "ewb_no": _ewbNoCtrl.text,
       "dispatch": _dispatchCtrl.text,
       "no_of_package": _pkgCtrl.text,
@@ -357,10 +347,11 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
       "grand_totamt": grandTotal,
       "amtin_words": _amtInWordsCtrl.text,
       "accno": _accNoCtrl.text,
-      if (_terminalMode == "PROFORMA") "customer": _selectedMasterId,
-      if (_terminalMode == "OUTWARD") "customer": _selectedMasterId,
-      if (_terminalMode == "INWARD") "supplier": _selectedMasterId,
+
+      if (_selectedMasterType == "CUSTOMER") "customer": _selectedMasterId,
+      if (_selectedMasterType == "SUPPLIER") "supplier": _selectedMasterId,
       if (_terminalMode != "PROFORMA") "dc_type": _terminalMode,
+
       "details": rows.map((r) => {
         "sno": r.sno,
         "product_name": r.productCtrl.text,
@@ -384,34 +375,36 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
       final Uint8List logoBytes = (await rootBundle.load('assets/images/ultra_logo.jpeg')).buffer.asUint8List();
       final pw.ImageProvider logoImage = pw.MemoryImage(logoBytes);
 
-      List<String> singleCopyHeading = [];
+      List<String> printingCopiesHeadings = [];
+
       if (_terminalMode == 'PROFORMA') {
-        singleCopyHeading = ["PROFORMA VOUCHER"];
+        printingCopiesHeadings = ["PROFORMA VOUCHER"];
       } else if (_terminalMode == 'INWARD') {
-        singleCopyHeading = ["DC INWARD VOUCHER"];
-      } else {
-        singleCopyHeading = ["DC OUTWARD VOUCHER"];
+        printingCopiesHeadings = ["RETURNABLE", "NON RETURNABLE"];
+      } else if (_terminalMode == 'OUTWARD') {
+        printingCopiesHeadings = ["RETURNABLE", "NON RETURNABLE"];
       }
 
       final pdf = await InvoiceDCPdfService.generate(
         logoImage: logoImage,
         data: savedData,
         terminalMode: _terminalMode,
-        headings: singleCopyHeading,
+        headings: printingCopiesHeadings,
       );
 
       await Printing.layoutPdf(
         onLayout: (format) async => pdf.save(),
-        name: '${_terminalMode}_${savedData['billno']}.pdf',
+        name: '${_terminalMode}_${savedData['billno'] ?? savedData['dc_no'] ?? 'DOC'}.pdf',
       );
     } catch (e) {
-      debugPrint("PDF Engine Runtime Error: $e");
+      debugPrint("PDF Engine Runtime Error context execution safety breach: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isMobile = MediaQuery.of(context).size.width < 1000; // Layout sensitivity optimized for large web displays
+    bool isMobile = MediaQuery.of(context).size.width < 1000;
+    bool isProformaMode = _terminalMode == "PROFORMA";
 
     Color screenHeaderColor = const Color(0xFF2C3E50);
     if (_terminalMode == "OUTWARD") screenHeaderColor = const Color(0xFFD97706);
@@ -445,14 +438,11 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF4F6F8), // Soft industrial grey background
-
+        backgroundColor: const Color(0xFFF4F6F8),
         appBar: AppBar(
           backgroundColor: screenHeaderColor,
-          // IsMobile check ke hisab se AppBar ki height dynamic ho jayegi
           toolbarHeight: isMobile ? 120 : 70,
           title: isMobile
-          // 📱 MOBILE VIEW LAYOUT (Vertical Stack to prevent crashing)
               ? Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -473,7 +463,6 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              // Mobile me crashing rokne ke liye ToggleButtons ki jagah clean Dropdown
               Container(
                 height: 32,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -507,7 +496,6 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
               ),
             ],
           )
-          // 💻 DESKTOP / WEB LAYOUT (Original Wide Row)
               : Row(
             children: [
               Expanded(
@@ -522,7 +510,7 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
                     Row(children: [
                       _stat("TOTAL PCS", totalPcs.toInt().toString()),
                       _stat("BASE VALUE", taxableAmt.toStringAsFixed(2)),
-                      _stat("TOTAL TAX", totalTax.toStringAsFixed(2))
+                      if (isProformaMode) _stat("TOTAL TAX", totalTax.toStringAsFixed(2))
                     ]),
                   ],
                 ),
@@ -563,7 +551,6 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(12),
           child: Column(children: [
-            // Responsive Web Layout split into clean dual-column cards to avoid single line overcrowding
             isMobile
                 ? Column(children: [
               _section("SECTION 1: CONSIGNMENT METADATA", _buildInvoiceSection(true)),
@@ -576,7 +563,6 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
             ]),
             _section("SECTION 3: MATERIAL MATRIX GRID ENTRY", _buildProductGrid(isMobile)),
 
-            // Re-designed footer parameters segment bar inside main canvas
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -598,7 +584,6 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
     );
   }
 
-  // Refactored Matrix layouts to cleanly distribute fields vertically
   Widget _buildInvoiceSection(bool isMobile) => Column(children: [
     Row(children: [
       Expanded(child: _tf(_docNoCtrl, _terminalMode == "PROFORMA" ? "PROFORMA DRAFT NO (AUTO)" : "CHALLAN / DC NO")),
@@ -645,9 +630,6 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
     _tf(_shipAddrCtrl, "DELIVERY SITE DESTINATION ADDRESS"),
   ]);
 
-  // ==========================================================================
-  // PRODUCT ENTRIES MATRIX: Injected editable CGST, SGST, IGST cells
-  // ==========================================================================
   Widget _buildProductGrid(bool isMobile) {
     if (isMobile) {
       return Column(children: [
@@ -655,6 +637,9 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
         _addLineBtn(),
       ]);
     }
+
+    bool isProformaMode = _terminalMode == "PROFORMA";
+
     return Column(children: [
       Container(padding: const EdgeInsets.all(8), color: const Color(0xFF34495E), child: Row(children: [
         const SizedBox(width: 30, child: Text("SL", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
@@ -663,11 +648,15 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
         const Expanded(flex: 1, child: Text("HSN", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
         const Expanded(flex: 1, child: Text("QTY", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
         const Expanded(flex: 1, child: Text("RATE/VAL", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-        const Expanded(flex: 1, child: Text("CGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-        const Expanded(flex: 1, child: Text("SGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-        const Expanded(flex: 1, child: Text("IGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+
+        if (isProformaMode) ...[
+          const Expanded(flex: 1, child: Text("CGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+          const Expanded(flex: 1, child: Text("SGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+          const Expanded(flex: 1, child: Text("IGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+        ],
+
         const Expanded(flex: 2, child: Text("EXTENDED VAL", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-        if (_terminalMode != "PROFORMA") const Expanded(flex: 3, child: Text("REMARKS / DELIVERY PURPOSE", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+        if (!isProformaMode) const Expanded(flex: 3, child: Text("REMARKS / DELIVERY PURPOSE", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
         const SizedBox(width: 35),
       ])),
       ListView.builder(
@@ -682,6 +671,8 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
 
   Widget _buildMobileProductCard(int i) {
     final r = rows[i];
+    bool isProformaMode = _terminalMode == "PROFORMA";
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       color: Colors.grey.shade50,
@@ -700,26 +691,31 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
           const SizedBox(width: 8),
           Expanded(child: _tf(r.rateCtrl, "UNIT VALUE", isNum: true, onCh: (v) => _calculateTotals())),
         ]),
-        const SizedBox(height: 8),
-        Row(children: [
-          Expanded(child: _tf(r.cgstPCtrl, "CGST %", isNum: true, onCh: (v) => _calculateTotals())),
-          const SizedBox(width: 8),
-          Expanded(child: _tf(r.sgstPCtrl, "SGST %", isNum: true, onCh: (v) => _calculateTotals())),
-          const SizedBox(width: 8),
-          Expanded(child: _tf(r.igstPCtrl, "IGST %", readOnly: true)),
-        ]),
-        if (_terminalMode != "PROFORMA") ...[
+
+        if (isProformaMode) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: _tf(r.cgstPCtrl, "CGST %", isNum: true, onCh: (v) => _calculateTotals())),
+            const SizedBox(width: 8),
+            Expanded(child: _tf(r.sgstPCtrl, "SGST %", isNum: true, onCh: (v) => _calculateTotals())),
+            const SizedBox(width: 8),
+            Expanded(child: _tf(r.igstPCtrl, "IGST %", readOnly: true)),
+          ]),
+        ],
+        if (!isProformaMode) ...[
           const SizedBox(height: 8),
           _tf(r.remarksCtrl, "REMARKS / CONSIGNMENT PURPOSE"),
         ],
         const SizedBox(height: 8),
-        _tf(r.lineTotalCtrl, "TOTAL VALUE WITH TAX", readOnly: true),
+        _tf(r.lineTotalCtrl, "TOTAL VALUE", readOnly: true),
       ])),
     );
   }
 
   Widget _itemRowDesktop(int i) {
     final r = rows[i];
+    bool isProformaMode = _terminalMode == "PROFORMA";
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Row(children: [
@@ -730,19 +726,18 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
         Expanded(flex: 1, child: _gridTf(r.qtyCtrl, "0", isNum: true, onCh: (v)=>_calculateTotals())),
         Expanded(flex: 1, child: _gridTf(r.rateCtrl, "0", isNum: true, onCh: (v)=>_calculateTotals())),
 
-        // Editable Tax fields injected inline matching Sales terminal standards
-        Expanded(flex: 1, child: _gridTf(r.cgstPCtrl, "9", isNum: true, onCh: (v)=>_calculateTotals())),
-        Expanded(flex: 1, child: _gridTf(r.sgstPCtrl, "9", isNum: true, onCh: (v)=>_calculateTotals())),
-        Expanded(flex: 1, child: _gridTf(r.igstPCtrl, "18", readOnly: true)),
+        if (isProformaMode) ...[
+          Expanded(flex: 1, child: _gridTf(r.cgstPCtrl, "9", isNum: true, onCh: (v)=>_calculateTotals())),
+          Expanded(flex: 1, child: _gridTf(r.sgstPCtrl, "9", isNum: true, onCh: (v)=>_calculateTotals())),
+          Expanded(flex: 1, child: _gridTf(r.igstPCtrl, "18", readOnly: true)),
+        ],
 
         Expanded(flex: 2, child: _gridTf(r.lineTotalCtrl, "0", readOnly: true)),
-        if (_terminalMode != "PROFORMA") Expanded(flex: 3, child: _gridTf(r.remarksCtrl, "Delivery Purpose")),
+        if (!isProformaMode) Expanded(flex: 3, child: _gridTf(r.remarksCtrl, "Delivery Purpose")),
         IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => setState(() { if(rows.length > 1) rows.removeAt(i); _calculateTotals(); })),
       ]),
     );
   }
-
-  Widget _row(bool isMobile, List<Widget> children) => isMobile ? Column(children: children.map((c) => Padding(padding: const EdgeInsets.only(bottom: 8), child: c)).toList()) : Row(children: children.map((c) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: c))).toList());
 
   Widget _tf(TextEditingController c, String l, {bool isNum = false, bool readOnly = false, Function(String)? onCh}) => TextFormField(
     controller: c, readOnly: readOnly, onChanged: onCh, textInputAction: TextInputAction.next,
@@ -765,8 +760,8 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
       onTap: () => c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length),
       keyboardType: isNum ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
       inputFormatters: isNum ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))] : null,
-      style: TextStyle(fontSize: 11, fontWeight: readOnly ? FontWeight.bold : FontWeight.w500, color: readOnly ? Colors.black : Colors.black),
-      decoration: InputDecoration(hintText: h, hintStyle: const TextStyle(fontSize: 10), border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8), isDense: true, filled: readOnly, fillColor: readOnly ? Color(0xFFF1F5F9) : Colors.white),
+      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.black),
+      decoration: InputDecoration(hintText: h, hintStyle: const TextStyle(fontSize: 10), border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8), isDense: true, filled: readOnly, fillColor: readOnly ? const Color(0xFFF1F5F9) : Colors.white),
     ),
   );
 
@@ -795,32 +790,75 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
 
   Widget _section(String t, Widget c) => Card(elevation: 2, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(side: BorderSide(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(8)), color: Colors.white, child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(t, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF475569))), const Divider(height: 16), c])));
 
+  // 🌟 FIXED UNIFIED UNIQUE STRING KEY DROPDOWN ENGINE: Safely compares tokens values to avoid Map comparison crashes
   Widget _masterDropdown() {
-    if (_terminalMode == "INWARD") {
-      return BlocBuilder<SupplierBloc, SupplierState>(
-        builder: (context, state) {
-          final List<SupplierEntity> list = (state is SupplierLoaded) ? state.suppliers : [];
-          return DropdownButtonFormField<SupplierEntity>(
-            value: _selectedMasterId == null ? null : list.where((e) => e.id == _selectedMasterId).firstOrNull,
-            decoration: const InputDecoration(labelText: "SELECT SUPPLIER (VOUCHERS ORIGIN)", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
-            items: list.map((s) => DropdownMenuItem(value: s, child: Text(s.name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
-            onChanged: (v) { if (v != null) setState(() { _selectedMasterId = v.id; _nameCtrl.text = v.name; _addrCtrl.text = v.address ?? ""; _cityCtrl.text = v.city ?? ""; _pinCtrl.text = v.pinCode ?? ""; _gstNoCtrl.text = v.gstNumber ?? ""; _accNoCtrl.text = v.accountNo ?? ""; _calculateTotals(); }); },
-          );
-        },
-      );
-    } else {
-      return BlocBuilder<CustomerBloc, CustomerState>(
-        builder: (context, state) {
-          final List<CustomerEntity> list = (state is CustomerLoaded) ? state.customers : [];
-          return DropdownButtonFormField<CustomerEntity>(
-            value: _selectedMasterId == null ? null : list.where((e) => e.id == _selectedMasterId).firstOrNull,
-            decoration: InputDecoration(labelText: "SELECT CUSTOMER (${_terminalMode == 'PROFORMA' ? 'ESTIMATION PROFILE' : 'CONSIGNEE TARGET'})", border: const OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
-            items: list.map((c) => DropdownMenuItem(value: c, child: Text(c.name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
-            onChanged: (v) { if (v != null) setState(() { _selectedMasterId = v.id; _nameCtrl.text = v.name; _addrCtrl.text = v.address ?? ""; _cityCtrl.text = v.pincode ?? ""; _pinCtrl.text = v.pincode ?? ""; _gstNoCtrl.text = v.gstNo ?? ""; _accNoCtrl.text = "NA"; _calculateTotals(); }); },
-          );
-        },
-      );
-    }
+    return BlocBuilder<SupplierBloc, SupplierState>(
+      builder: (context, supplierState) {
+        return BlocBuilder<CustomerBloc, CustomerState>(
+          builder: (context, customerState) {
+            final List<SupplierEntity> suppliers = (supplierState is SupplierLoaded) ? supplierState.suppliers : [];
+            final List<CustomerEntity> customers = (customerState is CustomerLoaded) ? customerState.customers : [];
+
+            final List<DropdownMenuItem<String>> masterItemsList = [];
+
+            for (var s in suppliers) {
+              masterItemsList.add(DropdownMenuItem(
+                value: "SUPPLIER_${s.id}", // 👈 Flat String representation
+                child: Text("[SUPPLIER] ${s.name.toUpperCase()}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+              ));
+            }
+
+            for (var c in customers) {
+              masterItemsList.add(DropdownMenuItem(
+                value: "CUSTOMER_${c.id}", // 👈 Flat String representation
+                child: Text("[CUSTOMER] ${c.name.toUpperCase()}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
+              ));
+            }
+
+            // 🟢 Compute safe matching String value
+            String? selectedItemValueKey;
+            if (_selectedMasterId != null && _selectedMasterType != null) {
+              selectedItemValueKey = "${_selectedMasterType}_$_selectedMasterId";
+            }
+
+            return DropdownButtonFormField<String>(
+              value: selectedItemValueKey,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: "SELECT TRANS-PARTY PROFILE (SUPPLIER / CUSTOMER) *", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
+              items: masterItemsList,
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() {
+                    final parts = v.split("_");
+                    _selectedMasterType = parts[0];
+                    _selectedMasterId = int.tryParse(parts[1]);
+
+                    if (_selectedMasterType == "SUPPLIER") {
+                      final s = suppliers.firstWhere((e) => e.id == _selectedMasterId);
+                      _nameCtrl.text = s.name;
+                      _addrCtrl.text = s.address ?? "";
+                      _cityCtrl.text = s.city ?? "";
+                      _pinCtrl.text = s.pinCode ?? "";
+                      _gstNoCtrl.text = s.gstNumber ?? "";
+                      _accNoCtrl.text = s.accountNo ?? "";
+                    } else {
+                      final c = customers.firstWhere((e) => e.id == _selectedMasterId);
+                      _nameCtrl.text = c.name;
+                      _addrCtrl.text = c.address;
+                      _cityCtrl.text = c.city;
+                      _pinCtrl.text = c.pincode;
+                      _gstNoCtrl.text = c.gstNo;
+                      _accNoCtrl.text = "NA";
+                    }
+                    _calculateTotals();
+                  });
+                }
+              },
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _uomDropdown(int i) {
@@ -843,7 +881,6 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
     );
   }
 }*/
-
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -990,33 +1027,39 @@ class UnifiedRowController {
   final hsnCtrl = TextEditingController();
   final qtyCtrl = TextEditingController(text: "0");
   final rateCtrl = TextEditingController(text: "0");
-  final cgstPCtrl = TextEditingController(text: "9");
-  final sgstPCtrl = TextEditingController(text: "9");
-  final igstPCtrl = TextEditingController(text: "18");
+  final cgstPCtrl = TextEditingController(text: "0");
+  final sgstPCtrl = TextEditingController(text: "0");
+  final igstPCtrl = TextEditingController(text: "0");
   final lineTotalCtrl = TextEditingController(text: "0.00");
-  final remarksCtrl = TextEditingController(text: "GOODS FOR DELIVERY");
+  final remarksCtrl = TextEditingController(text: "");
   String? selectedUom;
 
   UnifiedRowController({required this.sno});
 
-  void calculate() {
+  void calculate({required bool isProformaMode}) {
     double q = double.tryParse(qtyCtrl.text) ?? 0;
     double r = double.tryParse(rateCtrl.text) ?? 0;
-    double cP = double.tryParse(cgstPCtrl.text) ?? 0;
-    double sP = double.tryParse(sgstPCtrl.text) ?? 0;
-
-    double iP = cP + sP;
-    igstPCtrl.text = iP.toStringAsFixed(0);
-
     double baseAmt = q * r;
-    double taxAmt = (baseAmt * iP / 100);
-    lineTotalCtrl.text = (baseAmt + taxAmt).toStringAsFixed(2);
+
+    if (isProformaMode) {
+      double cP = double.tryParse(cgstPCtrl.text) ?? 0;
+      double sP = double.tryParse(sgstPCtrl.text) ?? 0;
+      double iP = cP + sP;
+      igstPCtrl.text = iP.toStringAsFixed(0);
+
+      double taxAmt = (baseAmt * iP / 100);
+      lineTotalCtrl.text = (baseAmt + taxAmt).toStringAsFixed(2);
+    } else {
+      cgstPCtrl.text = "0";
+      sgstPCtrl.text = "0";
+      igstPCtrl.text = "0";
+      lineTotalCtrl.text = baseAmt.toStringAsFixed(2);
+    }
   }
 }
 
-
 // ==========================================================================
-// 💻 PART 3: MAIN TERMINAL INTERFACE UI (DUAL COPY CAPABILITY LOADED)
+// 💻 MAIN TERMINAL INTERFACE UI (DUAL COPY CAPABILITY LOADED)
 // ==========================================================================
 class DynamicTerminalScreen extends StatefulWidget {
   const DynamicTerminalScreen({super.key});
@@ -1029,9 +1072,9 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
   String _terminalMode = "INWARD";
 
   final _docNoCtrl = TextEditingController();
-  final _docDateCtrl = TextEditingController(text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
+  final _docDateCtrl = TextEditingController(text: DateFormat('dd-MM-yyyy').format(DateTime.now()));
   final _poNoCtrl = TextEditingController();
-  final _poDateCtrl = TextEditingController(text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
+  final _poDateCtrl = TextEditingController(text: DateFormat('dd-MM-yyyy').format(DateTime.now()));
   final _pkgCtrl = TextEditingController();
   final _dueDaysCtrl = TextEditingController(text: "0");
   final _ewbNoCtrl = TextEditingController();
@@ -1048,6 +1091,8 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
   final _fwdChargeCtrl = TextEditingController(text: "0");
   final _amtInWordsCtrl = TextEditingController(text: "ZERO RUPEES ONLY");
   double totalPcs = 0, taxableAmt = 0, totalTax = 0, grandTotal = 0, roundOff = 0;
+
+  String? _selectedMasterType;
   int? _selectedMasterId;
 
   List<UnifiedRowController> rows = [UnifiedRowController(sno: 1)];
@@ -1056,6 +1101,43 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
   void initState() {
     super.initState();
     _loadMasters();
+    _fetchNextVoucherNumber(); // 👈 Initial serial preload matrix trigger
+  }
+
+  @override
+  void dispose() {
+    _docNoCtrl.dispose(); _docDateCtrl.dispose(); _poNoCtrl.dispose(); _poDateCtrl.dispose();
+    _pkgCtrl.dispose(); _dueDaysCtrl.dispose(); _ewbNoCtrl.dispose(); _dispatchCtrl.dispose();
+    _nameCtrl.dispose(); _addrCtrl.dispose(); _cityCtrl.dispose(); _pinCtrl.dispose();
+    _gstNoCtrl.dispose(); _shipAddrCtrl.dispose(); _accNoCtrl.dispose(); _fwdChargeCtrl.dispose();
+    _amtInWordsCtrl.dispose();
+    super.dispose();
+  }
+
+  // 🟢 NEW FEATURE METHOD: Fetches next tracking counter dynamically across dynamic terminals states
+  Future<void> _fetchNextVoucherNumber() async {
+    try {
+      if (_terminalMode == "PROFORMA") {
+        final response = await sl<ApiClient>().get('/api/transactions/proforma_invoice/next_proforma_number/');
+        if (response.statusCode == 200 && response.data != null) {
+          setState(() {
+            _docNoCtrl.text = response.data['next_pi_bill_no'].toString();
+          });
+        }
+      } else {
+        final response = await sl<ApiClient>().get(
+          '/api/transactions/delivery_challan/next_dc_number/',
+          query: {'dc_type': _terminalMode},
+        );
+        if (response.statusCode == 200 && response.data != null) {
+          setState(() {
+            _docNoCtrl.text = response.data['next_dc_bill_no'].toString();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error pipeline syncing next sequence number parameter token: $e");
+    }
   }
 
   String _numToWords(int n) {
@@ -1072,27 +1154,27 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
 
   void _loadMasters() {
     context.read<UomBloc>().add(LoadUoms());
-    if (_terminalMode == "INWARD") {
-      context.read<SupplierBloc>().add(LoadSuppliers());
-    } else {
-      context.read<CustomerBloc>().add(LoadCustomers());
-    }
+    context.read<SupplierBloc>().add(LoadSuppliers());
+    context.read<CustomerBloc>().add(LoadCustomers());
   }
 
   void _calculateTotals() {
     double p = 0, a = 0, tax = 0;
+    bool isProformaMode = _terminalMode == "PROFORMA";
 
     for (var r in rows) {
-      r.calculate();
+      r.calculate(isProformaMode: isProformaMode);
       double q = double.tryParse(r.qtyCtrl.text) ?? 0;
       double rt = double.tryParse(r.rateCtrl.text) ?? 0;
 
       p += q;
       a += (q * rt);
 
-      double rowTaxable = q * rt;
-      double rowTaxPercent = double.tryParse(r.igstPCtrl.text) ?? 0;
-      tax += (rowTaxable * rowTaxPercent / 100);
+      if (isProformaMode) {
+        double rowTaxable = q * rt;
+        double rowTaxPercent = double.tryParse(r.igstPCtrl.text) ?? 0;
+        tax += (rowTaxable * rowTaxPercent / 100);
+      }
     }
 
     double fwd = double.tryParse(_fwdChargeCtrl.text) ?? 0;
@@ -1102,7 +1184,7 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
     setState(() {
       totalPcs = p;
       taxableAmt = double.parse(a.toStringAsFixed(2));
-      totalTax = double.parse(tax.toStringAsFixed(2));
+      totalTax = isProformaMode ? double.parse(tax.toStringAsFixed(2)) : 0.0;
       double rawRoundOff = roundedTotal - sub;
       roundOff = double.parse(rawRoundOff.toStringAsFixed(2));
       grandTotal = roundedTotal;
@@ -1118,27 +1200,38 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
       lastDate: DateTime(2101),
     );
     if (picked != null) {
-      setState(() => controller.text = DateFormat('yyyy-MM-dd').format(picked));
+      setState(() => controller.text = DateFormat('dd-MM-yyyy').format(picked));
     }
   }
 
   void _resetForm() {
     setState(() {
       _docNoCtrl.clear();
-      _docDateCtrl.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      _docDateCtrl.text = DateFormat('dd-MM-yyyy').format(DateTime.now());
       _poNoCtrl.clear();
-      _poDateCtrl.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      _poDateCtrl.text = DateFormat('dd-MM-yyyy').format(DateTime.now());
       _pkgCtrl.clear();
       _dueDaysCtrl.text = "0";
       _ewbNoCtrl.clear();
       _dispatchCtrl.clear();
       _selectedMasterId = null;
+      _selectedMasterType = null;
       _nameCtrl.clear(); _addrCtrl.clear(); _cityCtrl.clear();
       _pinCtrl.clear(); _gstNoCtrl.clear(); _shipAddrCtrl.clear(); _accNoCtrl.clear();
       _fwdChargeCtrl.text = "0"; _amtInWordsCtrl.text = "ZERO RUPEES ONLY";
       rows = [UnifiedRowController(sno: 1)];
       totalPcs = 0; taxableAmt = 0; totalTax = 0; grandTotal = 0; roundOff = 0;
     });
+    _fetchNextVoucherNumber(); // 👈 Re-fetches current sequential count after clearing form matrix
+  }
+
+  String _formatToBackendDate(String ddMMyyyy) {
+    try {
+      DateTime parsed = DateFormat('dd-MM-yyyy').parse(ddMMyyyy);
+      return DateFormat('yyyy-MM-dd').format(parsed);
+    } catch (_) {
+      return DateTime.now().toString().split(" ")[0];
+    }
   }
 
   void _dispatchSave() {
@@ -1148,11 +1241,11 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
     }
 
     final payload = {
-      "billdate": _docDateCtrl.text,
+      "billdate": _formatToBackendDate(_docDateCtrl.text),
       "purchase_order_no": _poNoCtrl.text,
-      "purchase_order_date": _poDateCtrl.text,
+      "purchase_order_date": _formatToBackendDate(_poDateCtrl.text),
       "dc_no": _terminalMode != "PROFORMA" ? _docNoCtrl.text : "",
-      "dc_date": _terminalMode != "PROFORMA" ? _docDateCtrl.text : null,
+      "dc_date": _terminalMode != "PROFORMA" ? _formatToBackendDate(_docDateCtrl.text) : null,
       "ewb_no": _ewbNoCtrl.text,
       "dispatch": _dispatchCtrl.text,
       "no_of_package": _pkgCtrl.text,
@@ -1173,10 +1266,11 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
       "grand_totamt": grandTotal,
       "amtin_words": _amtInWordsCtrl.text,
       "accno": _accNoCtrl.text,
-      if (_terminalMode == "PROFORMA") "customer": _selectedMasterId,
-      if (_terminalMode == "OUTWARD") "customer": _selectedMasterId,
-      if (_terminalMode == "INWARD") "supplier": _selectedMasterId,
+
+      if (_selectedMasterType == "CUSTOMER") "customer": _selectedMasterId,
+      if (_selectedMasterType == "SUPPLIER") "supplier": _selectedMasterId,
       if (_terminalMode != "PROFORMA") "dc_type": _terminalMode,
+
       "details": rows.map((r) => {
         "sno": r.sno,
         "product_name": r.productCtrl.text,
@@ -1195,7 +1289,6 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
     context.read<UnifiedTxBloc>().add(SaveUnifiedTxEvent(payload, _terminalMode));
   }
 
-  // 🔥 UPDATED FEATURE BLOCK: DUAL COPY MATRIX EXECUTION PIPELINE
   Future<void> _generatePdf(Map<String, dynamic> savedData) async {
     try {
       final Uint8List logoBytes = (await rootBundle.load('assets/images/ultra_logo.jpeg')).buffer.asUint8List();
@@ -1206,15 +1299,9 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
       if (_terminalMode == 'PROFORMA') {
         printingCopiesHeadings = ["PROFORMA VOUCHER"];
       } else if (_terminalMode == 'INWARD') {
-        printingCopiesHeadings = [
-          "RETURNABLE",
-          "NON RETURNABLE"
-        ];
+        printingCopiesHeadings = ["RETURNABLE", "NON RETURNABLE"];
       } else if (_terminalMode == 'OUTWARD') {
-        printingCopiesHeadings = [
-          "RETURNABLE",
-          "NON RETURNABLE"
-        ];
+        printingCopiesHeadings = ["RETURNABLE", "NON RETURNABLE"];
       }
 
       final pdf = await InvoiceDCPdfService.generate(
@@ -1236,6 +1323,7 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
   @override
   Widget build(BuildContext context) {
     bool isMobile = MediaQuery.of(context).size.width < 1000;
+    bool isProformaMode = _terminalMode == "PROFORMA";
 
     Color screenHeaderColor = const Color(0xFF2C3E50);
     if (_terminalMode == "OUTWARD") screenHeaderColor = const Color(0xFFD97706);
@@ -1320,6 +1408,7 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
                           _resetForm();
                           _loadMasters();
                         });
+                        _fetchNextVoucherNumber(); // 👈 Refetches upcoming series count on state mutate
                       }
                     },
                   ),
@@ -1341,7 +1430,7 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
                     Row(children: [
                       _stat("TOTAL PCS", totalPcs.toInt().toString()),
                       _stat("BASE VALUE", taxableAmt.toStringAsFixed(2)),
-                      _stat("TOTAL TAX", totalTax.toStringAsFixed(2))
+                      if (isProformaMode) _stat("TOTAL TAX", totalTax.toStringAsFixed(2))
                     ]),
                   ],
                 ),
@@ -1357,6 +1446,7 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
                     _resetForm();
                     _loadMasters();
                   });
+                  _fetchNextVoucherNumber(); // 👈 Refetches upcoming series count on state mutate
                 },
                 borderRadius: BorderRadius.circular(4),
                 constraints: const BoxConstraints(minHeight: 32, minWidth: 100),
@@ -1417,7 +1507,8 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
 
   Widget _buildInvoiceSection(bool isMobile) => Column(children: [
     Row(children: [
-      Expanded(child: _tf(_docNoCtrl, _terminalMode == "PROFORMA" ? "PROFORMA DRAFT NO (AUTO)" : "CHALLAN / DC NO")),
+      // 🌟 DYNAMIC HEADER BINDING: Swaps text safely while pre-loading tracking integer counts
+      Expanded(child: _tf(_docNoCtrl, _terminalMode == "PROFORMA" ? "PROFORMA SERIAL NO (AUTO)" : "CHALLAN / DC NUMERIC NO *", readOnly: true)),
       const SizedBox(width: 8),
       Expanded(child: _dateTf(_docDateCtrl, "DOCUMENT DATE")),
     ]),
@@ -1468,6 +1559,9 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
         _addLineBtn(),
       ]);
     }
+
+    bool isProformaMode = _terminalMode == "PROFORMA";
+
     return Column(children: [
       Container(padding: const EdgeInsets.all(8), color: const Color(0xFF34495E), child: Row(children: [
         const SizedBox(width: 30, child: Text("SL", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
@@ -1476,11 +1570,15 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
         const Expanded(flex: 1, child: Text("HSN", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
         const Expanded(flex: 1, child: Text("QTY", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
         const Expanded(flex: 1, child: Text("RATE/VAL", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-        const Expanded(flex: 1, child: Text("CGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-        const Expanded(flex: 1, child: Text("SGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-        const Expanded(flex: 1, child: Text("IGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+
+        if (isProformaMode) ...[
+          const Expanded(flex: 1, child: Text("CGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+          const Expanded(flex: 1, child: Text("SGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+          const Expanded(flex: 1, child: Text("IGST%", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+        ],
+
         const Expanded(flex: 2, child: Text("EXTENDED VAL", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-        if (_terminalMode != "PROFORMA") const Expanded(flex: 3, child: Text("REMARKS / DELIVERY PURPOSE", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+        if (!isProformaMode) const Expanded(flex: 3, child: Text("REMARKS / DELIVERY PURPOSE", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
         const SizedBox(width: 35),
       ])),
       ListView.builder(
@@ -1495,6 +1593,8 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
 
   Widget _buildMobileProductCard(int i) {
     final r = rows[i];
+    bool isProformaMode = _terminalMode == "PROFORMA";
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       color: Colors.grey.shade50,
@@ -1513,26 +1613,31 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
           const SizedBox(width: 8),
           Expanded(child: _tf(r.rateCtrl, "UNIT VALUE", isNum: true, onCh: (v) => _calculateTotals())),
         ]),
-        const SizedBox(height: 8),
-        Row(children: [
-          Expanded(child: _tf(r.cgstPCtrl, "CGST %", isNum: true, onCh: (v) => _calculateTotals())),
-          const SizedBox(width: 8),
-          Expanded(child: _tf(r.sgstPCtrl, "SGST %", isNum: true, onCh: (v) => _calculateTotals())),
-          const SizedBox(width: 8),
-          Expanded(child: _tf(r.igstPCtrl, "IGST %", readOnly: true)),
-        ]),
-        if (_terminalMode != "PROFORMA") ...[
+
+        if (isProformaMode) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: _tf(r.cgstPCtrl, "CGST %", isNum: true, onCh: (v) => _calculateTotals())),
+            const SizedBox(width: 8),
+            Expanded(child: _tf(r.sgstPCtrl, "SGST %", isNum: true, onCh: (v) => _calculateTotals())),
+            const SizedBox(width: 8),
+            Expanded(child: _tf(r.igstPCtrl, "IGST %", readOnly: true)),
+          ]),
+        ],
+        if (!isProformaMode) ...[
           const SizedBox(height: 8),
           _tf(r.remarksCtrl, "REMARKS / CONSIGNMENT PURPOSE"),
         ],
         const SizedBox(height: 8),
-        _tf(r.lineTotalCtrl, "TOTAL VALUE WITH TAX", readOnly: true),
+        _tf(r.lineTotalCtrl, "TOTAL VALUE", readOnly: true),
       ])),
     );
   }
 
   Widget _itemRowDesktop(int i) {
     final r = rows[i];
+    bool isProformaMode = _terminalMode == "PROFORMA";
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Row(children: [
@@ -1542,11 +1647,15 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
         Expanded(flex: 1, child: _gridTf(r.hsnCtrl, "HSN")),
         Expanded(flex: 1, child: _gridTf(r.qtyCtrl, "0", isNum: true, onCh: (v)=>_calculateTotals())),
         Expanded(flex: 1, child: _gridTf(r.rateCtrl, "0", isNum: true, onCh: (v)=>_calculateTotals())),
-        Expanded(flex: 1, child: _gridTf(r.cgstPCtrl, "9", isNum: true, onCh: (v)=>_calculateTotals())),
-        Expanded(flex: 1, child: _gridTf(r.sgstPCtrl, "9", isNum: true, onCh: (v)=>_calculateTotals())),
-        Expanded(flex: 1, child: _gridTf(r.igstPCtrl, "18", readOnly: true)),
+
+        if (isProformaMode) ...[
+          Expanded(flex: 1, child: _gridTf(r.cgstPCtrl, "9", isNum: true, onCh: (v)=>_calculateTotals())),
+          Expanded(flex: 1, child: _gridTf(r.sgstPCtrl, "9", isNum: true, onCh: (v)=>_calculateTotals())),
+          Expanded(flex: 1, child: _gridTf(r.igstPCtrl, "18", readOnly: true)),
+        ],
+
         Expanded(flex: 2, child: _gridTf(r.lineTotalCtrl, "0", readOnly: true)),
-        if (_terminalMode != "PROFORMA") Expanded(flex: 3, child: _gridTf(r.remarksCtrl, "Delivery Purpose")),
+        if (!isProformaMode) Expanded(flex: 3, child: _gridTf(r.remarksCtrl, "Delivery Purpose")),
         IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => setState(() { if(rows.length > 1) rows.removeAt(i); _calculateTotals(); })),
       ]),
     );
@@ -1603,32 +1712,87 @@ class _DynamicTerminalScreenState extends State<DynamicTerminalScreen> {
 
   Widget _section(String t, Widget c) => Card(elevation: 2, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(side: BorderSide(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(8)), color: Colors.white, child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(t, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF475569))), const Divider(height: 16), c])));
 
+// 🌟 FIXED & FILTERED DROPDOWN ENGINE: Proforma mode locks to Customers only
   Widget _masterDropdown() {
-    if (_terminalMode == "INWARD") {
-      return BlocBuilder<SupplierBloc, SupplierState>(
-        builder: (context, state) {
-          final List<SupplierEntity> list = (state is SupplierLoaded) ? state.suppliers : [];
-          return DropdownButtonFormField<SupplierEntity>(
-            value: _selectedMasterId == null ? null : list.where((e) => e.id == _selectedMasterId).firstOrNull,
-            decoration: const InputDecoration(labelText: "SELECT SUPPLIER (VOUCHERS ORIGIN)", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
-            items: list.map((s) => DropdownMenuItem(value: s, child: Text(s.name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
-            onChanged: (v) { if (v != null) setState(() { _selectedMasterId = v.id; _nameCtrl.text = v.name; _addrCtrl.text = v.address ?? ""; _cityCtrl.text = v.city ?? ""; _pinCtrl.text = v.pinCode ?? ""; _gstNoCtrl.text = v.gstNumber ?? ""; _accNoCtrl.text = v.accountNo ?? ""; _calculateTotals(); }); },
-          );
-        },
-      );
-    } else {
-      return BlocBuilder<CustomerBloc, CustomerState>(
-        builder: (context, state) {
-          final List<CustomerEntity> list = (state is CustomerLoaded) ? state.customers : [];
-          return DropdownButtonFormField<CustomerEntity>(
-            value: _selectedMasterId == null ? null : list.where((e) => e.id == _selectedMasterId).firstOrNull,
-            decoration: InputDecoration(labelText: "SELECT CUSTOMER (${_terminalMode == 'PROFORMA' ? 'ESTIMATION PROFILE' : 'CONSIGNEE TARGET'})", border: const OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
-            items: list.map((c) => DropdownMenuItem(value: c, child: Text(c.name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
-            onChanged: (v) { if (v != null) setState(() { _selectedMasterId = v.id; _nameCtrl.text = v.name; _addrCtrl.text = v.address ?? ""; _cityCtrl.text = v.pincode ?? ""; _pinCtrl.text = v.pincode ?? ""; _gstNoCtrl.text = v.gstNo ?? ""; _accNoCtrl.text = "NA"; _calculateTotals(); }); },
-          );
-        },
-      );
-    }
+    return BlocBuilder<SupplierBloc, SupplierState>(
+      builder: (context, supplierState) {
+        return BlocBuilder<CustomerBloc, CustomerState>(
+          builder: (context, customerState) {
+            final List<SupplierEntity> suppliers = (supplierState is SupplierLoaded) ? supplierState.suppliers : [];
+            final List<CustomerEntity> customers = (customerState is CustomerLoaded) ? customerState.customers : [];
+
+            final List<DropdownMenuItem<String>> masterItemsList = [];
+
+            // 🟢 CONDITION APPLIED: Suppliers will be skipped completely if mode is PROFORMA
+            if (_terminalMode != "PROFORMA") {
+              for (var s in suppliers) {
+                masterItemsList.add(DropdownMenuItem(
+                  value: "SUPPLIER_${s.id}",
+                  child: Text("[SUPPLIER] ${s.name.toUpperCase()}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                ));
+              }
+            }
+
+            // Customers always populate across all terminal modes matrix
+            for (var c in customers) {
+              masterItemsList.add(DropdownMenuItem(
+                value: "CUSTOMER_${c.id}",
+                child: Text("[CUSTOMER] ${c.name.toUpperCase()}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
+              ));
+            }
+
+            // Compute safe matching String value
+            String? selectedItemValueKey;
+            if (_selectedMasterId != null && _selectedMasterType != null) {
+              // Reset current selection safely if user switches to Proforma while a Supplier was selected
+              if (_terminalMode == "PROFORMA" && _selectedMasterType == "SUPPLIER") {
+                _selectedMasterId = null;
+                _selectedMasterType = null;
+                _nameCtrl.clear(); _addrCtrl.clear(); _cityCtrl.clear();
+                _pinCtrl.clear(); _gstNoCtrl.clear(); _accNoCtrl.clear();
+              } else {
+                selectedItemValueKey = "${_selectedMasterType}_$_selectedMasterId";
+              }
+            }
+
+            return DropdownButtonFormField<String>(
+              value: selectedItemValueKey,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: "SELECT TRANS-PARTY PROFILE (SUPPLIER / CUSTOMER) *", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
+              items: masterItemsList,
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() {
+                    final parts = v.split("_");
+                    _selectedMasterType = parts[0];
+                    _selectedMasterId = int.tryParse(parts[1]);
+
+                    if (_selectedMasterType == "SUPPLIER") {
+                      final s = suppliers.firstWhere((e) => e.id == _selectedMasterId);
+                      _nameCtrl.text = s.name;
+                      _addrCtrl.text = s.address ?? "";
+                      _cityCtrl.text = s.city ?? "";
+                      _pinCtrl.text = s.pinCode ?? "";
+                      _gstNoCtrl.text = s.gstNumber ?? "";
+                      _accNoCtrl.text = s.accountNo ?? "";
+                    } else {
+                      final c = customers.firstWhere((e) => e.id == _selectedMasterId);
+                      _nameCtrl.text = c.name;
+                      _addrCtrl.text = c.address;
+                      _cityCtrl.text = c.city;
+                      _pinCtrl.text = c.pincode;
+                      _gstNoCtrl.text = c.gstNo;
+                      _accNoCtrl.text = "NA";
+                    }
+                    _calculateTotals();
+                  });
+                }
+              },
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _uomDropdown(int i) {

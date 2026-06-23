@@ -8,6 +8,7 @@ import 'package:stock_management/features/masters/presentation/pages/ledger_entr
 import 'package:stock_management/features/masters/presentation/pages/supplier_master_screen.dart';
 import 'package:stock_management/features/reports/presentation/bloc/salse_purchase_legder_report_bloc.dart';
 import 'package:stock_management/features/transaction/presentation/pages/dc_terminal_view.dart';
+import 'package:stock_management/features/transaction/presentation/pages/purchase_order_transaction_page.dart';
 import 'package:stock_management/features/transaction/presentation/pages/transaction_entry_screen.dart';
 import '../../core/utils/app_routes.dart';
 import 'core/theme/app_color.dart';
@@ -86,6 +87,8 @@ class _MyAppState extends State<MyApp> {
         BlocProvider(create: (_) => sl<JournalBloc>()),
         BlocProvider(create: (_) => sl<UnifiedTxBloc>()),
         BlocProvider(create: (_) => sl<NoteTxBloc>()),
+        //BlocProvider(create: (_) => sl<PurchaseOrderBloc>()),
+
       ],
       child: GestureDetector(
         // 🌟 CAPTURE EVERY USER TOUCH MATRIX -> Reset dynamic timer pulse on interaction

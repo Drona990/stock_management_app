@@ -242,6 +242,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 isCollapsed: isCollapsed,
                 children: [
                   {"title": "Delivery Challan", "route": "/dc_terminal"},
+                  {"title": "Purchase Order", "route": "/purchase_order"},
                   {"title": "Sales Invoice", "route": "/sales_transaction"},
                   {"title": "Purchase Voucher", "route": "/purchase_transaction"},
                   {"title": "BOM Project Config","route":"/project_bom"},

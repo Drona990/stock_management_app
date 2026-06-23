@@ -30,7 +30,7 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
         barrierDismissible: false,
         builder: (BuildContext dialogContext) {
           isLoaderVisible = true;
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)));
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8), strokeWidth: 1.5));
         },
       );
 
@@ -71,89 +71,59 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isMobile = MediaQuery.of(context).size.width < 900;
+    final bool isMobile = MediaQuery.of(context).size.width < 950;
 
     return BlocProvider(
       create: (context) => LedgerBloc(LedgerRepository())..add(LoadLedgerData(type: "Sales")),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF1F5F9), // Soft slate background
+        backgroundColor: const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.white,
+          toolbarHeight: 52,
+          iconTheme: const IconThemeData(color: Color(0xFF1E293B), size: 18),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("SALES LEDGER AUDIT REPORT",
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: Color(0xFF1E293B), letterSpacing: 0.3)),
+              Text("REAL-TIME REVENUE MONITORING & RECIPIENT LEDGER ENTRIES DIRECTORY",
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 8, fontWeight: FontWeight.bold))
+            ],
+          ),
+          shape: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
+        ),
         body: Column(
           children: [
-            _buildProfessionalHeader(isMobile),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 32, vertical: 20),
-                child: Column(
-                  children: [
-                    _buildTopStats(isMobile),
-                    const SizedBox(height: 24),
-                    _buildFilterSection(isMobile),
-                    const SizedBox(height: 16),
-                    Expanded(child: _buildTransactionList()),
-                  ],
-                ),
-              ),
-            ),
+            _buildTopStats(isMobile),
+            _buildFilterSection(isMobile),
+            const Divider(height: 1),
+            Expanded(child: _buildTransactionList(isMobile)),
           ],
         ),
       ),
     );
   }
 
-  // --- 1. PREMIUM HEADER ---
-  Widget _buildProfessionalHeader(bool isMobile) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F172A), // Deep navy
-        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            backgroundColor: Color(0xFF38BDF8),
-            child: Icon(Icons.receipt_long, color: Colors.white),
-          ),
-          const SizedBox(width: 16),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Sales Ledger", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-              Text("Real-time Revenue Monitoring", style: TextStyle(color: Colors.white54, fontSize: 11)),
-            ],
-          ),
-          const Spacer(),
-          if (!isMobile)
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.file_download_outlined, size: 18),
-              label: const Text("EXPORT CSV"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white10,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // --- 2. STATS ---
+  // --- 1. COMPACT METRICS TILES OVERVIEW ---
   Widget _buildTopStats(bool isMobile) {
     return BlocBuilder<LedgerBloc, LedgerState>(
       builder: (context, state) {
         final summary = (state is LedgerLoaded) ? state.summary : {};
-        return Row(
-          children: [
-            _modernStatTile("GROSS SALES", "₹${summary['total_debit'] ?? '0'}", Icons.show_chart, Colors.blue),
-            const SizedBox(width: 16),
-            _modernStatTile("TOTAL RECEIPTS", "₹${summary['total_credit'] ?? '0'}", Icons.account_balance, Colors.greenAccent),
-            if (!isMobile) ...[
-              const SizedBox(width: 16),
-              _modernStatTile("NET REVENUE", "₹${summary['closing_balance'] ?? '0'}", Icons.account_balance_wallet, Colors.orange),
-            ]
-          ],
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          color: Colors.white,
+          child: Row(
+            children: [
+              _modernStatTile("GROSS SALES (DR)", "₹${summary['total_debit'] ?? '0'}", Icons.show_chart, Colors.blue),
+              const SizedBox(width: 8),
+              _modernStatTile("TOTAL RECEIPTS (CR)", "₹${summary['total_credit'] ?? '0'}", Icons.account_balance, Colors.green),
+              if (!isMobile) ...[
+                const SizedBox(width: 8),
+                _modernStatTile("NET BALANCES REVENUE", "₹${summary['closing_balance'] ?? '0'}", Icons.account_balance_wallet, Colors.orange),
+              ]
+            ],
+          ),
         );
       },
     );
@@ -162,140 +132,204 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
   Widget _modernStatTile(String title, String val, IconData icon, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
+          color: const Color(0xFFF8FAFC),
+          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.zero,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            CircleAvatar(backgroundColor: color.withOpacity(0.1), radius: 16, child: Icon(icon, color: color, size: 16)),
-            const SizedBox(height: 12),
-            Text(title, style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
-            const SizedBox(height: 4),
-            Text(val, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
+            CircleAvatar(backgroundColor: color.withOpacity(0.08), radius: 14, child: Icon(icon, color: color, size: 12)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 7.5, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+                  const SizedBox(height: 2),
+                  Text(val, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: Color(0xFF1E293B)), overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // --- 3. FILTER SECTION ---
+  // --- 2. REGISTRY FILTERS CONSOLE BAR ---
   Widget _buildFilterSection(bool isMobile) {
     return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: Colors.white,
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()), // Frontend Filter Trigger
-              decoration: InputDecoration(
-                hintText: "Filter by Invoice # or Customer Name...",
-                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                prefixIcon: const Icon(Icons.search, color: Color(0xFF38BDF8)),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            child: Container(
+              height: 35,
+              decoration: BoxDecoration(color: const Color(0xFFF8FAFC), border: Border.all(color: Colors.grey.shade200)),
+              child: TextField(
+                onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                decoration: InputDecoration(
+                  hintText: "FILTER BY SERIAL NO, INVOICE ID OR CUSTOMER CONSIGNMENT NAME...",
+                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.2),
+                  prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF0284C7), size: 14),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.only(bottom: 12),
+                ),
               ),
             ),
           ),
-          const VerticalDivider(width: 20),
+          const SizedBox(width: 10),
           _dateFilterButton(),
         ],
       ),
     );
   }
 
-  // --- 4. TRANSACTION LIST WITH FRONTEND FILTERING ---
-  Widget _buildTransactionList() {
+  // --- 3. HIGH-DENSITY AUDIT LIST WITH BACKEND SYNC EXTRACTION ---
+  Widget _buildTransactionList(bool isMobile) {
     return BlocBuilder<LedgerBloc, LedgerState>(
       builder: (context, state) {
-        if (state is LedgerLoading) return const Center(child: CircularProgressIndicator());
+        if (state is LedgerLoading) return const Center(child: CircularProgressIndicator(strokeWidth: 1.5));
         if (state is LedgerLoaded) {
-          // Frontend Filtering Logic
+          // Dynamic Multi-aligned Front-end search matching filters engine
           final filteredData = state.data.where((item) {
             final name = item['inname']?.toString().toLowerCase() ?? "";
             final invNo = item['invno']?.toString().toLowerCase() ?? "";
-            return name.contains(_searchQuery) || invNo.contains(_searchQuery);
+            final serialNo = item['inv_bill_no']?.toString().toLowerCase() ?? "";
+            return name.contains(_searchQuery) || invNo.contains(_searchQuery) || serialNo.contains(_searchQuery);
           }).toList();
 
-          if (filteredData.isEmpty) return const Center(child: Text("No records match your search"));
+          if (filteredData.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.receipt_long_sharp, size: 22, color: Colors.grey),
+                  const SizedBox(height: 6),
+                  Text("Zero commercial sales parameters logged under matching criteria rows.", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            );
+          }
 
-          return ListView.builder(
+          return ListView.separated(
+            padding: const EdgeInsets.all(10),
             itemCount: filteredData.length,
             physics: const BouncingScrollPhysics(),
-            itemBuilder: (context, index) => _buildTransactionCard(filteredData[index], index),
+            separatorBuilder: (_, __) => const SizedBox(height: 6),
+            itemBuilder: (context, index) => _buildTransactionCard(filteredData[index], index, isMobile),
           );
         }
-        return const Center(child: Text("Error loading data"));
+        return const Center(child: Text("Error synchronizing revenue database directory ledger tracks"));
       },
     );
   }
 
-  Widget _buildTransactionCard(dynamic item, int index) {
+  // --- 4. HIGH DENSITY METRIC DATA CARDS MATRIX ---
+  Widget _buildTransactionCard(dynamic item, int index, bool isMobile) {
     bool isHovered = _hoveredRowIndex == index;
+    String autoBillNo = item['inv_bill_no']?.toString() ?? 'N/A';
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hoveredRowIndex = index),
       onExit: (_) => setState(() => _hoveredRowIndex = null),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(bottom: 12),
+        duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isHovered ? const Color(0xFF38BDF8) : Colors.transparent, width: 1.5),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(isHovered ? 0.08 : 0.02), blurRadius: 10, offset: const Offset(0, 4))],
+          border: Border(
+            left: const BorderSide(color: Color(0xFF0F172A), width: 4.5),
+            top: BorderSide(color: isHovered ? const Color(0xFF38BDF8) : Colors.grey.shade200, width: 1),
+            bottom: BorderSide(color: isHovered ? const Color(0xFF38BDF8) : Colors.grey.shade200, width: 1),
+            right: BorderSide(color: isHovered ? const Color(0xFF38BDF8) : Colors.grey.shade200, width: 1),
+          ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: isMobile
+              ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.receipt, color: Color(0xFF475569), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(item['invno'] ?? "N/A", style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-                      Text("Bill Date: ${item['invdate']}", style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
-                    ],
-                  ),
-                  const Spacer(),
-                  // Hover Action
-                  if (isHovered)
-                    IconButton(
-                      icon: const Icon(Icons.file_open, color: Colors.redAccent, size: 20),
-                      onPressed: () => _generatePdf(item),
-                      tooltip: "View PDF",
-                    ),
-                ],
-              ),
-              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("CONSIGNEE", style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-                        const SizedBox(height: 4),
-                        Text(item['inname']?.toString().toUpperCase() ?? "N/A", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF334155))),
-                      ],
-                    ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(color: const Color(0xFF0F172A).withOpacity(0.08), borderRadius: BorderRadius.circular(2)),
+                    child: const Text("SALES INVOICE", style: TextStyle(color: Color(0xFF0F172A), fontSize: 6.5, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
                   ),
-                  _amountCol("DEBIT", "₹${item['trdr']}", const Color(0xFF2563EB)),
-                  _amountCol("CREDIT", "₹${item['trcr']}", const Color(0xFFDC2626)),
+                  _buildReprintTrigger(item),
                 ],
               ),
+              const SizedBox(height: 4),
+              Text(item['inname']?.toString().toUpperCase() ?? 'N/A', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
+              const SizedBox(height: 5),
+              Wrap(
+                spacing: 4,
+                runSpacing: 2,
+                children: [
+                  _metaLabel("SERIAL NO", autoBillNo, highlight: true),
+                  _bullet(),
+                  _metaLabel("DOC ID", item['invno'] ?? 'N/A'),
+                  _bullet(),
+                  _metaLabel("DATE", item['invdate'] ?? 'N/A'),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _amountCol("DEBIT VAL (REV)", "₹${item['trdr']}", const Color(0xFF2563EB)),
+                  _amountCol("CREDIT VAL (REC)", "₹${item['trcr']}", const Color(0xFFDC2626)),
+                ],
+              )
+            ],
+          )
+              : Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(item['inname']?.toString().toUpperCase() ?? 'N/A', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(color: const Color(0xFF0F172A).withOpacity(0.08), borderRadius: BorderRadius.circular(2)),
+                          child: const Text("SALES INVOICE", style: TextStyle(color: Color(0xFF0F172A), fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        _metaLabel("SERIAL NO", autoBillNo, highlight: true),
+                        _bullet(),
+                        _metaLabel("DOC ID", item['invno'] ?? 'N/A'),
+                        _bullet(),
+                        _metaLabel("RECORDING DATE", item['invdate'] ?? 'N/A'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Row(
+                children: [
+                  _amountCol("DEBIT VAL (REV)", "₹${item['trdr']}", const Color(0xFF2563EB)),
+                  const SizedBox(width: 24),
+                  _amountCol("CREDIT VAL (REC)", "₹${item['trcr']}", const Color(0xFFDC2626)),
+                ],
+              ),
+              const SizedBox(width: 24),
+              _buildReprintTrigger(item),
             ],
           ),
         ),
@@ -306,33 +340,84 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
   Widget _amountCol(String label, String val, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
-        Text(val, style: TextStyle(fontWeight: FontWeight.w900, color: color, fontSize: 16)),
+        Text(label, style: const TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.2)),
+        Text(val, style: TextStyle(fontWeight: FontWeight.w900, color: color, fontSize: 13)),
       ],
+    );
+  }
+
+  Widget _buildReprintTrigger(dynamic item) {
+    return InkWell(
+      onTap: () => _generatePdf(item),
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: Colors.grey.shade300)
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.print_rounded, color: Color(0xFF475569), size: 12),
+            SizedBox(width: 4),
+            Text("REPRINT", style: TextStyle(fontSize: 8, color: Color(0xFF475569), fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _metaLabel(String label, String value, {bool active = false, bool highlight = false}) {
+    return Text(
+      "$label: ${value.toUpperCase()}",
+      style: TextStyle(
+          fontSize: 8.5,
+          color: highlight ? const Color(0xFF16A085) : (active ? const Color(0xFF0284C7) : Colors.grey.shade600),
+          fontWeight: (active || highlight) ? FontWeight.w900 : FontWeight.bold,
+          letterSpacing: 0.1
+      ),
+    );
+  }
+
+  Widget _bullet() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Text("•", style: TextStyle(fontSize: 9, color: Colors.grey.shade400, fontWeight: FontWeight.bold)),
     );
   }
 
   Widget _dateFilterButton() {
     return InkWell(
       onTap: () async {
-        final picked = await showDateRangePicker(context: context, firstDate: DateTime(2000), lastDate: DateTime(2101));
+        final picked = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2000),
+            lastDate: DateTime(2101),
+            builder: (context, child) {
+              return Theme(data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: Color(0xFF0F172A))), child: child!);
+            }
+        );
         if (picked != null) {
           setState(() => _dateRange = picked);
           context.read<LedgerBloc>().add(LoadLedgerData(
+            type: "Sales",
             fromDate: DateFormat('yyyy-MM-dd').format(picked.start),
             toDate: DateFormat('yyyy-MM-dd').format(picked.end),
           ));
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(color: const Color(0xFF38BDF8).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(color: const Color(0xFF0F172A).withOpacity(0.08), borderRadius: BorderRadius.zero),
         child: Row(
           children: [
-            const Icon(Icons.date_range, size: 16, color: Color(0xFF0284C7)),
+            const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFF0F172A)),
             const SizedBox(width: 8),
-            Text(_dateRange == null ? "Date Filter" : DateFormat('dd MMM').format(_dateRange!.start), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0284C7))),
+            Text(_dateRange == null ? "DATE FILTER" : "${DateFormat('dd MMM').format(_dateRange!.start)} - ${DateFormat('dd MMM').format(_dateRange!.end)}", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
           ],
         ),
       ),

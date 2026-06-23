@@ -25,6 +25,7 @@ import '../../features/masters/presentation/pages/bom_entry_page.dart';
 import '../../features/transaction/presentation/pages/bom_project_final_config_page.dart';
 import '../../features/transaction/presentation/pages/cash_transaction_page.dart';
 import '../../features/transaction/presentation/pages/credit_debit_note_terminal_view.dart';
+import '../../features/transaction/presentation/pages/purchase_order_transaction_page.dart';
 import '../../features/transaction/presentation/pages/transaction_entry_screen.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
 import '../../features/main/presentation/pages/bar&resturant/main_dashboard.dart';
@@ -110,6 +111,8 @@ class AppRouter {
           GoRoute(path: '/bom_history', builder: (context, state) => const BomProjectHistoryPage()),
           GoRoute(path: '/sales_transaction', builder: (context, state) => const TransactionTerminalScreen(isSales: true)),
           GoRoute(path: '/purchase_transaction', builder: (context, state) => const TransactionTerminalScreen(isSales: false)),
+          GoRoute(path: '/purchase_order', builder: (context, state) => const PurchaseOrderTerminalScreen
+            ()),
           GoRoute(path: '/adjustment_return', builder: (context, state) => const CreditDebitNoteTerminalScreen()),
           GoRoute(path: '/financial_note_summary', builder: (context, state) => const FinancialNoteReportScreen()),
           GoRoute(path: '/dc_summary', builder: (context, state) => const DcChallanHistory()),
