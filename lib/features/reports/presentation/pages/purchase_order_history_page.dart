@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../../../injection.dart';
-import '../../../transaction/presentation/pages/dc_invoice_pdf_generator.dart';
+import '../../../transaction/presentation/pages/po_pdf_service.dart';
 import '../../../transaction/presentation/pages/purchase_order_transaction_page.dart';
 
 class PurchaseOrderHistoryPage extends StatefulWidget {
@@ -150,7 +150,7 @@ class _PurchaseOrderHistoryPageState extends State<PurchaseOrderHistoryPage> {
         try {
           final ByteData rawLogo = await rootBundle.load('assets/images/ultra_logo.jpeg');
           final pw.ImageProvider logoImage = pw.MemoryImage(rawLogo.buffer.asUint8List());
-          final pdfDoc = await InvoiceDCPdfService.generate(logoImage: logoImage, data: item, terminalMode: "PO", headings: ["DUPLICATE DETAILED PO REPRINT"]);
+          final pdfDoc = await InvoicePOPdfService.generate(logoImage: logoImage, data: item, terminalMode: "PO", headings: ["DUPLICATE DETAILED PO REPRINT"]);
           await Printing.layoutPdf(onLayout: (format) async => pdfDoc.save(), name: 'DUPLICATE_PO_${item['billno']}.pdf');
         } catch (_) {}
       },

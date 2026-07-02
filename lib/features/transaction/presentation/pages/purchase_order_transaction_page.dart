@@ -41,6 +41,9 @@ class PurchaseOrderRepository {
       final response = await apiClient.get('/api/transactions/purchase_order/', query: {
         if (search != null && search.isNotEmpty) 'search': search,
       });
+
+      print("purchase order data $response");
+
       if (response.data is Map && response.data['results'] != null) {
         return response.data['results'] as List<dynamic>;
       }

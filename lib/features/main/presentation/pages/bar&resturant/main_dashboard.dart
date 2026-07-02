@@ -227,28 +227,59 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   {"title": "Customer Master", "route": "/customer_master"},
                   {"title": "Supplier Master", "route": "/supplier_master"},
                   {"title": "Unit Master", "route": "/uom_master"},
-                  {"title": "Material Type Master", "route": "/material_type_master"},
-                  {"title": "Material Master", "route": "/material_master"},
-                  {"title": "BOM Entry","route":"/bom_entry"},
                   {"title": "Ledger Master", "route": "/ledger_screen"},
                 ],
               ),
+
               const SizedBox(height: 4),
 
-              // 2. TRANSACTION SUB-SYSTEM
+              _buildCompactGroupMenu(
+                icon: Icons.assignment_outlined,
+                label: "Delivery Challan",
+                isCollapsed: isCollapsed,
+                children: [
+                  {"title": "Delivery Challan", "route": "/dc_terminal"},
+                  {"title": "DC History", "route": "/dc_summary"},
+                ],
+              ),
+
+              const SizedBox(height: 4),
+
+              _buildCompactGroupMenu(
+                icon: Icons.assignment_outlined,
+                label: "Salse / Purchase",
+                isCollapsed: isCollapsed,
+                children: [
+                  {"title": "Purchase Order", "route": "/purchase_order"},
+                  {"title": "Sales Invoice", "route": "/sales_transaction"},
+                  {"title": "Purchase Voucher", "route": "/purchase_transaction"},
+                  {"title": "Sales Reports", "route": "/sales_ledger_report"},
+                  {"title": "Purchase Reports", "route": "/purchase_ledger_report"},
+                ],
+              ),
+
+              const SizedBox(height: 4),
               _buildCompactGroupMenu(
                 icon: Icons.assignment_outlined,
                 label: "Transactions",
                 isCollapsed: isCollapsed,
                 children: [
-                  {"title": "Delivery Challan", "route": "/dc_terminal"},
-                  {"title": "Purchase Order", "route": "/purchase_order"},
-                  {"title": "Sales Invoice", "route": "/sales_transaction"},
-                  {"title": "Purchase Voucher", "route": "/purchase_transaction"},
-                  {"title": "BOM Project Config","route":"/project_bom"},
                   {"title": "Adjustment & Return", "route": "/adjustment_return"},
                   {"title": "Cash Book", "route": "/cash_transaction"},
                   {"title": "Journal Entry", "route": "/journal_entry"},
+                ],
+              ),
+              const SizedBox(height: 4),
+              _buildCompactGroupMenu(
+                icon: Icons.assignment_outlined,
+                label: "Job Work",
+                isCollapsed: isCollapsed,
+                children: [
+                  {"title": "Material Type Master", "route": "/material_type_master"},
+                  {"title": "Material Master", "route": "/material_master"},
+                  {"title": "BOM Entry","route":"/bom_entry"},
+                  {"title": "BOM Project Config","route":"/project_bom"},
+                  {"title": "BOM History", "route": "/bom_history"},
                 ],
               ),
               const SizedBox(height: 4),
@@ -259,11 +290,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 label: "Reports Center",
                 isCollapsed: isCollapsed,
                 children: [
-                  {"title": "Sales Reports", "route": "/sales_ledger_report"},
-                  {"title": "Purchase Reports", "route": "/purchase_ledger_report"},
                   {"title": "Journal Summary", "route": "/ledger_summary"},
-                  {"title": "DC History", "route": "/dc_summary"},
-                  {"title": "BOM History", "route": "/bom_history"},
                   {"title": "Debit / Credit Note History", "route": "/financial_note_summary"},
                 ],
               ),

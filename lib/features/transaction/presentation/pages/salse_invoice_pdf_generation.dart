@@ -240,7 +240,7 @@ class InvoicePdfService {
 
         // 3. TABLE FILLER CLOSURE (Fixed isLast issue here)
         pw.Container(
-          height: 150,
+          height: 360,
           decoration: const pw.BoxDecoration(
               border: pw.Border(bottom: pw.BorderSide(width: 1))
           ),
