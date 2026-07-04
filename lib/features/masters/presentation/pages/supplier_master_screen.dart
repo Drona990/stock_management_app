@@ -392,18 +392,32 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                     itemBuilder: (context, idx) {
                       final item = filteredList[idx];
                       bool isSelected = editingSupplier?.id == item.id;
-                      return ListTile(
-                        onTap: () => _populateForm(item),
-                        dense: true,
-                        selected: isSelected,
-                        selectedTileColor: const Color(0xFF1E293B),
-                        title: Text(item.name.toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isSelected ? Colors.cyanAccent : Colors.white)),
-                        subtitle: Text("Phone: ${item.mobileNo} | GST: ${item.gstNumber.isEmpty ? 'N/A' : item.gstNumber}", style: TextStyle(color: Colors.grey.shade400, fontSize: 10)),
-                        trailing: const Icon(Icons.chevron_right_rounded, size: 14, color: Colors.grey),
+
+                      // Wrap in Material to satisfy the ListTile paint requirement
+                      return Material(
+                        color: Colors.transparent,
+                        child: ListTile(
+                          onTap: () => _populateForm(item),
+                          dense: true,
+                          selected: isSelected,
+                          selectedTileColor: const Color(0xFF1E293B),
+                          title: Text(
+                              item.name.toUpperCase(),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                  color: isSelected ? Colors.cyanAccent : Colors.white
+                              )
+                          ),
+                          subtitle: Text(
+                              "Phone: ${item.mobileNo} | GST: ${item.gstNumber.isEmpty ? 'N/A' : item.gstNumber}",
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 10)
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded, size: 14, color: Colors.grey),
+                        ),
                       );
                     },
-                  );
-                }
+                  );                }
                 return const Center(child: Text("Directory Sync Error", style: TextStyle(color: Colors.red)));
               },
             ),

@@ -79,8 +79,8 @@ class LedgerMasterPage extends StatefulWidget {
 class _LedgerMasterPageState extends State<LedgerMasterPage> {
   // Hardcoded identical internal naming parameters controller setups
   final _name = TextEditingController();
-  final _cr = TextEditingController(text: "0.00");
-  final _dr = TextEditingController(text: "0.00");
+  final _cr = TextEditingController();
+  final _dr = TextEditingController();
   final _search = TextEditingController();
 
   int? _id;
@@ -317,7 +317,7 @@ class _LedgerMasterPageState extends State<LedgerMasterPage> {
                           _profColumn("CR (₹)", flex: 1.5),
                           _profColumn("DR (₹)", flex: 1.5),
                           _profColumn("TIME", flex: 1.2),
-                          _profColumn("ACT", flex: 1.2),
+                          _profColumn("ACT", flex: 1),
                         ],
                         rows: state.data.map((e) {
                           String time = e['updated_at'] != null

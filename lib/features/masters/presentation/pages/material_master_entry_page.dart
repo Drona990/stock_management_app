@@ -1152,22 +1152,26 @@ class _MaterialMasterPageState extends State<MaterialMasterPage> {
                         decoration: const BoxDecoration(
                             border: Border(bottom: BorderSide(color: Color(0xFF1E293B), width: 0.5))
                         ),
-                        child: ListTile(
-                          dense: true,
-                          selected: isSelected,
-                          selectedTileColor: const Color(0xFF1E293B),
-                          onTap: () => _populateFormForEdit(item),
-                          leading: Container(
-                            width: 30, height: 32,
-                            decoration: BoxDecoration(color: const Color(0xFF1E293B), border: Border.all(color: Colors.grey.shade800, width: 0.5)),
-                            child: _renderInlineGridThumbnail(item.imagePath, serverBase),
-                          ),
-                          title: Text(item.materialCode, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isSelected ? Colors.cyanAccent : Colors.cyanAccent.shade100)),
-                          subtitle: Text(item.name, style: TextStyle(color: Colors.grey.shade300, fontSize: 10.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.edit_note_rounded, size: 16, color: Colors.orangeAccent),
-                            padding: EdgeInsets.zero, constraints: const BoxConstraints(),
-                            onPressed: () => _populateFormForEdit(item),
+                        // WRAP IN MATERIAL TO FIX INK SPLASH ASSERTION
+                        child: Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            dense: true,
+                            selected: isSelected,
+                            selectedTileColor: const Color(0xFF1E293B),
+                            onTap: () => _populateFormForEdit(item),
+                            leading: Container(
+                              width: 30, height: 32,
+                              decoration: BoxDecoration(color: const Color(0xFF1E293B), border: Border.all(color: Colors.grey.shade800, width: 0.5)),
+                              child: _renderInlineGridThumbnail(item.imagePath, serverBase),
+                            ),
+                            title: Text(item.materialCode, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isSelected ? Colors.cyanAccent : Colors.cyanAccent.shade100)),
+                            subtitle: Text(item.name, style: TextStyle(color: Colors.grey.shade300, fontSize: 10.5), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.edit_note_rounded, size: 16, color: Colors.orangeAccent),
+                              padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                              onPressed: () => _populateFormForEdit(item),
+                            ),
                           ),
                         ),
                       );

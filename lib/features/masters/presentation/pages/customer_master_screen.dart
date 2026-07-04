@@ -364,15 +364,30 @@ class _CustomerMasterScreenState extends State<CustomerMasterScreen> {
                       final item = filteredList[idx];
                       bool isSelected = editingCustomer?.id == item.id;
                       return ListTile(
-                        onTap: () => _populateForm(item),
-                        dense: true,
-                        selected: isSelected,
-                        selectedTileColor: const Color(0xFF1E293B),
-                        title: Text(item.name.toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isSelected ? Colors.cyanAccent : Colors.white)),
-                        subtitle: Text("Mob: ${item.mobile} | GST: ${item.gstNo.isEmpty ? 'N/A' : item.gstNo}", style: TextStyle(color: Colors.grey.shade400, fontSize: 10)),
-                        trailing: const Icon(Icons.chevron_right_rounded, size: 14, color: Colors.grey),
-                      );
-                    },
+                        // WRAP IN MATERIAL TO PROVIDE A PAINT ANCESTOR FOR INK SPLASHES
+                        title: Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            onTap: () => _populateForm(item),
+                            dense: true,
+                            selected: isSelected,
+                            selectedTileColor: const Color(0xFF1E293B),
+                            title: Text(
+                                item.name.toUpperCase(),
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                    color: isSelected ? Colors.cyanAccent : Colors.white
+                                )
+                            ),
+                            subtitle: Text(
+                                "Mob: ${item.mobile} | GST: ${item.gstNo.isEmpty ? 'N/A' : item.gstNo}",
+                                style: TextStyle(color: Colors.grey.shade400, fontSize: 10)
+                            ),
+                            trailing: const Icon(Icons.chevron_right_rounded, size: 14, color: Colors.grey),
+                          ),
+                        ),
+                      );                    },
                   );
                 }
                 return const Center(child: Text("Directory Sync Error", style: TextStyle(color: Colors.red)));
@@ -630,10 +645,3 @@ Widget _badge(String t) {
   );
 }
 
-class _FlexWidget extends StatelessWidget {
-  final int flex;
-  final Widget child;
-  const _FlexWidget({required this.flex, required this.child});
-  @override
-  Widget build(BuildContext context) => child;
-}

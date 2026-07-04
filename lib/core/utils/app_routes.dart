@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get_it/get_it.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -29,6 +30,7 @@ import '../../features/transaction/presentation/pages/purchase_order_transaction
 import '../../features/transaction/presentation/pages/transaction_entry_screen.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
 import '../../features/main/presentation/pages/bar&resturant/main_dashboard.dart';
+import '../../injection.dart';
 
 class AppRouter {
   // 🌟 UPDATED: Made public so the API interceptor can call global force logout routes
@@ -115,7 +117,17 @@ class AppRouter {
             ()),
           GoRoute(path: '/adjustment_return', builder: (context, state) => const CreditDebitNoteTerminalScreen()),
           GoRoute(path: '/financial_note_summary', builder: (context, state) => const FinancialNoteReportScreen()),
-          GoRoute(path: '/dc_summary', builder: (context, state) => const DcChallanHistory()),
+          GoRoute(
+            path: '/dc_summary',
+            parentNavigatorKey: _shellNavigatorKey, // Enforces rendering tightly inside dashboard shell body
+            builder: (context, state) {
+              // 🌟 THE LIFECYCLE FIX ENGINE: Forcefully allocations brand new Bloc instance on every single route entry
+              return BlocProvider<UnifiedTxBloc>(
+                create: (context) => sl<UnifiedTxBloc>(),
+                child: const DcChallanHistory(),
+              );
+            },
+          ),
           GoRoute(path: '/sales_ledger_report', builder: (context, state) => const SalesLedgerReportPage()),
           GoRoute(path: '/purchase_ledger_report', builder: (context, state) => const PurchaseLedgerReportPage()),
           GoRoute(path: '/ledger_screen', builder: (context, state) => const LedgerMasterPage()),

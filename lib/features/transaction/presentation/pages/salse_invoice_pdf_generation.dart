@@ -2,6 +2,19 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 class InvoicePdfService {
+  static String _formatDate(String dateStr) {
+    try {
+      if (dateStr.isEmpty) return "";
+      // Agar date 'yyyy-mm-dd' format mein aa rahi hai
+      final parts = dateStr.split('-');
+      if (parts.length == 3) {
+        return "${parts[2]}-${parts[1]}-${parts[0]}";
+      }
+      return dateStr;
+    } catch (e) {
+      return dateStr;
+    }
+  }
   static Future<pw.Document> generate({
     required pw.ImageProvider? logoImage,
     required Map<String, dynamic> data,
@@ -148,9 +161,24 @@ class InvoicePdfService {
               ),
               child: pw.Column(
                 children: [
-                  _complexRow("Invoice No", data['billno'] ?? data['invoice_no'] ?? "", "DATE", data['billdate'] ?? data['invoice_date'] ?? ""),
-                  _complexRow("Cust.P.O :", data['purchase_order_no'] ?? "", "DATE", data['purchase_order_date'] ?? ""),
-                  _complexRow("D.C.NO :", data['dc_no'] ?? "", "DATE", data['dc_date'] ?? ""),
+                  _complexRow(
+                      "Invoice No",
+                      data['billno'] ?? data['invoice_no'] ?? "",
+                      "DATE",
+                      _formatDate(data['billdate'] ?? data['invoice_date'] ?? "")
+                  ),
+                  _complexRow(
+                      "Cust.P.O :",
+                      data['purchase_order_no'] ?? "",
+                      "P.O DATE",
+                      _formatDate(data['purchase_order_date'] ?? "")
+                  ),
+                  _complexRow(
+                      "D.C.NO :",
+                      data['dc_no'] ?? "",
+                      "D.C DATE",
+                      _formatDate(data['dc_date'] ?? "")
+                  ),
                   _complexRow("DISPATCH :", data['dispatch'] ?? "", " ", ""),
                   _complexRow("EWB NO:", data['ewb_no'] ?? data['ewb_number'] ?? "", " ", "", isLast: true),
                 ],
@@ -240,7 +268,7 @@ class InvoicePdfService {
 
         // 3. TABLE FILLER CLOSURE (Fixed isLast issue here)
         pw.Container(
-          height: 360,
+          height: 300, // change here for page fitting
           decoration: const pw.BoxDecoration(
               border: pw.Border(bottom: pw.BorderSide(width: 1))
           ),
@@ -285,8 +313,10 @@ class InvoicePdfService {
         flex: 2,
         child: pw.Column(children: [
           _calcRow("Total", data['totalamount']?.toString() ?? data['total_base_amount']?.toString() ?? "0"),
-          _calcRow("CGST", data['cgst']?.toString() ?? "0"),
-          _calcRow("SGST", data['sgst']?.toString() ?? "0"),
+          _calcRow("CGST  : 9.00 %", data['cgst']?.toString() ?? "0.00"),
+          _calcRow("SGST  : 9.00 %", data['sgst']?.toString() ?? "0.00"),
+          _calcRow("IGST  : 18.00 %", data['igst']?.toString() ?? "0.00"),
+          _calcRow("P & F", data['p_and_f_charges']?.toString() ?? "0.00"),
           _calcRow("G.Total", data['grand_totamt']?.toString() ?? data['grand_total']?.toString() ?? "0", b: true),
         ]),
       ),
@@ -371,5 +401,32 @@ class InvoicePdfService {
         : pw.SizedBox(width: width, child: pw.Container(decoration: decoration, child: cellWidget));
   }
 
-  static pw.Widget _calcRow(String l, String v, {bool b = false}) => pw.Container(height: 22, decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(width: 1))), child: pw.Row(children: [pw.SizedBox(width: 55, child: pw.Padding(padding: const pw.EdgeInsets.only(left: 4), child: pw.Text(l, style: pw.TextStyle(fontSize: 7.5, fontWeight: b ? pw.FontWeight.bold : null)))), pw.Container(width: 1, color: PdfColors.black), pw.Expanded(child: pw.Padding(padding: const pw.EdgeInsets.only(right: 4), child: pw.Text(v, textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7.5, fontWeight: b ? pw.FontWeight.bold : null))))]));
+  static pw.Widget _calcRow(String l, String v, {bool b = false}) => pw.Container(
+      height: 22,
+      decoration: const pw.BoxDecoration(
+          border: pw.Border(
+              bottom: pw.BorderSide(width: 1),
+              left: pw.BorderSide(width: 1), // 👈 Yahan LEFT border add kiya
+              right: pw.BorderSide(width: 1)  // 👈 Right side bhi border chahiye toh
+          )
+      ),
+      child: pw.Row(
+          children: [
+            pw.SizedBox(
+                width: 100,
+                child: pw.Padding(
+                    padding: const pw.EdgeInsets.only(left: 4),
+                    child: pw.Text(l, style: pw.TextStyle(fontSize: 7.5, fontWeight: b ? pw.FontWeight.bold : null))
+                )
+            ),
+            pw.Container(width: 1, color: PdfColors.black), // Ye beech wali line hai
+            pw.Expanded(
+                child: pw.Padding(
+                    padding: const pw.EdgeInsets.only(right: 4),
+                    child: pw.Text(v, textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7.5, fontWeight: b ? pw.FontWeight.bold : null))
+                )
+            )
+          ]
+      )
+  );
 }

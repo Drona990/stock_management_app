@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:stock_management/features/transaction/presentation/pages/dc_invoice_pdf_generator.dart';
+import '../../../../../injection.dart'; // Ensure sl injection tool path is correct
 
 import '../../../transaction/presentation/pages/dc_terminal_view.dart';
 
@@ -23,7 +24,10 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
   @override
   void initState() {
     super.initState();
-    _triggerHistoryFetch();
+    // 🌟 FIXED: Delayed trigger to handle state cleanup properly during navigation context switch
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _triggerHistoryFetch();
+    });
   }
 
   @override
@@ -33,6 +37,7 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
   }
 
   void _triggerHistoryFetch() {
+    if (!mounted) return;
     context.read<UnifiedTxBloc>().add(LoadUnifiedHistoryEvent(
       terminalMode: _activeTabMode,
       search: _searchCtrl.text.trim(),
@@ -82,29 +87,33 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
     double screenWidth = MediaQuery.of(context).size.width;
     bool isMobile = screenWidth < 650;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.white,
-        toolbarHeight: 52,
-        iconTheme: const IconThemeData(color: industrialSlate, size: 18),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    // 🌟 CRITICAL ROUTE PROTECTOR: Enforce clean Bloc allocation on screen entry/re-entry
+    return BlocProvider.value(
+      value: context.read<UnifiedTxBloc>(),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.white,
+          toolbarHeight: 52,
+          iconTheme: const IconThemeData(color: industrialSlate, size: 18),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("INVENTORY VOUCHERS DIRECTORY",
+                  style: TextStyle(color: industrialSlate, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+              Text("LOGISTICS DISPATCH MATERIAL MOVEMENT RUNNING AUDIT TRAILS",
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 7.5, fontWeight: FontWeight.bold))
+            ],
+          ),
+          shape: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
+        ),
+        body: Column(
           children: [
-            const Text("INVENTORY VOUCHERS DIRECTORY",
-                style: TextStyle(color: industrialSlate, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
-            Text("LOGISTICS DISPATCH MATERIAL MOVEMENT RUNNING AUDIT TRAILS",
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 7.5, fontWeight: FontWeight.bold))
+            _buildTopFilteringBar(isMobile),
+            Expanded(child: _buildRegistryContentGrid(isMobile)),
           ],
         ),
-        shape: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
-      ),
-      body: Column(
-        children: [
-          _buildTopFilteringBar(isMobile),
-          Expanded(child: _buildRegistryContentGrid(isMobile)),
-        ],
       ),
     );
   }
@@ -116,10 +125,7 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
           _activeTabMode = newMode;
           _searchCtrl.clear();
         });
-        context.read<UnifiedTxBloc>().add(LoadUnifiedHistoryEvent(
-          terminalMode: newMode,
-          search: "",
-        ));
+        _triggerHistoryFetch();
       }
     }
 
@@ -264,7 +270,6 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
               if (_activeTabMode == "OUTWARD") statusColor = const Color(0xFFD97706);
               if (_activeTabMode == "PROFORMA") statusColor = const Color(0xFF0F4C81);
 
-              // 🌟 DYNAMIC FIELD SYNC: Extracts sequential integer token maps safely
               String autoSequentialNo = _activeTabMode == "PROFORMA"
                   ? (rowItem['pi_bill_no']?.toString() ?? 'N/A')
                   : (rowItem['dc_bill_no']?.toString() ?? 'N/A');
@@ -304,7 +309,6 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
                       spacing: 4,
                       runSpacing: 2,
                       children: [
-                        // 🌟 INJECTED: Displays clear numeric continuous series tracker on mobile view cards
                         _metaLabel("SERIAL NO", autoSequentialNo, highlight: true),
                         _bullet(),
                         _metaLabel("DOC ID", rowItem['billno'] ?? rowItem['dc_no'] ?? 'N/A'),
@@ -366,7 +370,6 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
                           const SizedBox(height: 5),
                           Row(
                             children: [
-                              // 🌟 INJECTED: Displays clear numeric continuous series tracker on desktop views rows
                               _metaLabel("SERIAL NO", autoSequentialNo, highlight: true),
                               _bullet(),
                               _metaLabel("DOC ID", rowItem['billno'] ?? rowItem['dc_no'] ?? 'N/A'),
@@ -432,19 +435,28 @@ class _DcChallanHistoryState extends State<DcChallanHistory> {
   }
 
   Widget _metaLabel(String label, String value, {bool active = false, bool highlight = false}) {
+    String displayedValue = value;
+
+    if (label.toUpperCase() == "DATE" && value != 'N/A' && value.isNotEmpty) {
+      try {
+        displayedValue = DateFormat('dd-MM-yyyy').format(DateTime.parse(value));
+      } catch (_) {
+        displayedValue = value;
+      }
+    }
+
     return Text(
-      "$label: ${value.toUpperCase()}",
+      "$label: ${displayedValue.toUpperCase()}",
       style: TextStyle(
           fontSize: 8.5,
           color: highlight
-              ? const Color(0xFF16A085) // Sharp green for auto sequential counters
+              ? const Color(0xFF16A085)
               : (active ? const Color(0xFF0284C7) : Colors.grey.shade600),
           fontWeight: (active || highlight) ? FontWeight.w900 : FontWeight.bold,
           letterSpacing: 0.1
       ),
     );
   }
-
   Widget _bullet() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6),

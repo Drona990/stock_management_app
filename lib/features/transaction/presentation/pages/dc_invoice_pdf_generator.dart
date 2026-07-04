@@ -1,7 +1,21 @@
+
+import 'package:intl/intl.dart'; // 🌟 INJECTED: Added for clean DMY transformation
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 class InvoiceDCPdfService {
+  // 🌟 HELPER ENGINE: Converts any backend timestamp/date string into clean dd-MM-yyyy format
+  static String _formatToDMY(dynamic rawDate) {
+    if (rawDate == null || rawDate.toString().trim().isEmpty || rawDate.toString().toUpperCase() == 'N/A') {
+      return "";
+    }
+    try {
+      return DateFormat('dd-MM-yyyy').format(DateTime.parse(rawDate.toString().trim()));
+    } catch (_) {
+      return rawDate.toString(); // Fallback string representation if parsing fails
+    }
+  }
+
   static Future<pw.Document> generate({
     required pw.ImageProvider? logoImage,
     required Map<String, dynamic> data,
@@ -86,13 +100,9 @@ class InvoiceDCPdfService {
     ]);
   }
 
-  // ==========================================================================
-  // 🔍 FIXED: EXTRACTED MOBILE BOUNDARY SAFE MATRIX
-  // ==========================================================================
   static pw.Widget _buildDynamicConsigneeSection(Map<String, dynamic> data, String terminalMode) {
     const double sectionHeight = 100;
 
-    // Strict multi-layer validation engine to block null exceptions
     String validatedMobile = "NOT AVAILABLE";
     if (data.containsKey('mobile_no') && data['mobile_no'] != null && data['mobile_no'].toString().trim().isNotEmpty) {
       validatedMobile = data['mobile_no'].toString();
@@ -161,14 +171,21 @@ class InvoiceDCPdfService {
               ),
               child: pw.Column(
                 children: [
+                  // 🌟 FIXED: Added DMY parser layout to Bill/DC date parameters
                   _complexRow(
                       terminalMode == "PROFORMA" ? "Proforma No" : "Challan / DC No",
                       data['billno'] ?? data['dc_no'] ?? "",
                       "DATE",
-                      data['billdate'] ?? data['dc_date'] ?? ""
+                      _formatToDMY(data['billdate'] ?? data['dc_date'])
                   ),
-                  _complexRow("Cust.P.O :", data['purchase_order_no'] ?? "", "DATE", data['purchase_order_date'] ?? ""),
-                  _complexRow("REF. NO :", "", "DATE", ""),
+                  // 🌟 FIXED: Added DMY parser layout to Purchase Order date parameters
+                  _complexRow(
+                      "Cust.P.O NO :",
+                      data['purchase_order_no'] ?? "",
+                      "PO DATE",
+                      _formatToDMY(data['purchase_order_date'])
+                  ),
+                  _complexRow("REF. NO :", "", "REF. DATE", ""),
                   _complexRow("DISPATCH :", data['dispatch'] ?? "", " ", ""),
                   _complexRow("EWB NO:", data['ewb_no'] ?? data['ewb_number'] ?? "", " ", "", isLast: true),
                 ],
@@ -395,5 +412,31 @@ class InvoiceDCPdfService {
         : pw.SizedBox(width: width, child: pw.Container(decoration: decoration, child: cellWidget));
   }
 
-  static pw.Widget _calcRow(String l, String v, {bool b = false}) => pw.Container(height: 22, decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(width: 1))), child: pw.Row(children: [pw.SizedBox(width: 55, child: pw.Padding(padding: const pw.EdgeInsets.only(left: 4), child: pw.Text(l, style: pw.TextStyle(fontSize: 7.5, fontWeight: b ? pw.FontWeight.bold : null)))), pw.Container(width: 1, color: PdfColors.black), pw.Expanded(child: pw.Padding(padding: const pw.EdgeInsets.only(right: 4), child: pw.Text(v, textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7.5, fontWeight: b ? pw.FontWeight.bold : null))))]));
+  static pw.Widget _calcRow(String l, String v, {bool b = false}) => pw.Container(
+    height: 22,
+    decoration: const pw.BoxDecoration(
+      border: pw.Border(
+        bottom: pw.BorderSide(width: 1),
+        left: pw.BorderSide(width: 1), // 🌟 FIXED: Added solid left border stroke here
+      ),
+    ),
+    child: pw.Row(
+      children: [
+        pw.SizedBox(
+          width: 55,
+          child: pw.Padding(
+            padding: const pw.EdgeInsets.only(left: 4),
+            child: pw.Text(l, style: pw.TextStyle(fontSize: 7.5, fontWeight: b ? pw.FontWeight.bold : null)),
+          ),
+        ),
+        pw.Container(width: 1, color: PdfColors.black),
+        pw.Expanded(
+          child: pw.Padding(
+            padding: const pw.EdgeInsets.only(right: 4),
+            child: pw.Text(v, textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 7.5, fontWeight: b ? pw.FontWeight.bold : null)),
+          ),
+        ),
+      ],
+    ),
+  );
 }

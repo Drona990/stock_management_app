@@ -710,18 +710,33 @@ class _MaterialTypeMasterPageState extends State<MaterialTypeMasterPage> {
                       final item = state.materialTypes[idx];
                       bool isSelected = editingType?.id == item.id;
                       return ListTile(
-                        onTap: () => _populateForm(item),
-                        dense: true,
-                        selected: isSelected,
-                        selectedTileColor: const Color(0xFF1E293B),
-                        title: Text(item.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isSelected ? Colors.cyanAccent : Colors.white)),
-                        subtitle: Text(item.description.isEmpty ? "No specification description" : item.description, style: TextStyle(color: Colors.grey.shade400, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded, size: 14, color: Colors.redAccent),
-                          onPressed: () => _showDeletePrompt(context, bloc, item),
+                        title: Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            onTap: () => _populateForm(item),
+                            dense: true,
+                            selected: isSelected,
+                            selectedTileColor: const Color(0xFF1E293B),
+                            title: Text(item.name,
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                    color: isSelected ? Colors.cyanAccent : Colors.white
+                                )
+                            ),
+                            subtitle: Text(
+                                item.description.isEmpty ? "No specification description" : item.description,
+                                style: TextStyle(color: Colors.grey.shade400, fontSize: 10),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, size: 14, color: Colors.redAccent),
+                              onPressed: () => _showDeletePrompt(context, bloc, item),
+                            ),
+                          ),
                         ),
-                      );
-                    },
+                      );                    },
                   );
                 }
                 return const Center(child: Text("Directory Sync Error", style: TextStyle(color: Colors.red)));

@@ -1,7 +1,11 @@
+
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io'; // 🌟 Added for native platform checks
+import 'package:flutter/foundation.dart'; // 🌟 Added for kIsWeb support
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:web_socket_channel/io.dart'; // 🌟 Added for native socket upgrades
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../../core/network/api_client.dart';
@@ -73,10 +77,33 @@ class SessionRealtimeBloc extends Bloc<SessionRealtimeEvent, SessionRealtimeStat
           wsUrlString = "wss://$baseHttpUrl/ws/realtime-sessions/?token=$token";
         }
 
+        // 🌟 WINDOWS SECURE PORT EXPLICIT LOCK ENGINE
+        if (!kIsWeb && Platform.isWindows) {
+          if (wsUrlString.contains("test.ultra.winagrum.tech") && !wsUrlString.contains(":443")) {
+            wsUrlString = wsUrlString.replaceAll("test.ultra.winagrum.tech", "test.ultra.winagrum.tech:443");
+          } else if (wsUrlString.contains("winagrum.tech") && !wsUrlString.contains(":443")) {
+            wsUrlString = wsUrlString.replaceAll("winagrum.tech", "winagrum.tech:443");
+          }
+        }
+
         final wsUrl = Uri.parse(wsUrlString);
         debugPrint("📡 CONNECTING TO SESSION TELEMETRY SOCKET -> $wsUrlString");
 
-        _wsChannel = WebSocketChannel.connect(wsUrl);
+        // 🌟 WINDOWS C++ HANDSHAKE CAPITALS INTERCEPTOR PIPELINE
+        if (!kIsWeb && Platform.isWindows) {
+          _wsChannel = IOWebSocketChannel.connect(
+            wsUrl,
+            headers: {
+              'Connection': 'Upgrade',
+              'Upgrade': 'websocket',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FlutterDesktopClient',
+            },
+            customClient: HttpClient()
+              ..badCertificateCallback = (X509Certificate cert, String host, int port) => true,
+          );
+        } else {
+          _wsChannel = WebSocketChannel.connect(wsUrl);
+        }
 
         _wsSubscription = _wsChannel!.stream.listen((message) {
           debugPrint("📥 SESSION WS RECEIVED: $message");

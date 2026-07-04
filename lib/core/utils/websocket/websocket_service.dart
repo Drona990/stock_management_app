@@ -1,7 +1,11 @@
+
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io'; // 🌟 Add template for Platform queries
+import 'package:flutter/foundation.dart'; // 🌟 Add template for kIsWeb flag
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:web_socket_channel/io.dart'; // 🌟 Add for dynamic IOWebSocketChannel injections
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../app_routes.dart';
 import '../constant/Endpoints.dart';
@@ -47,6 +51,15 @@ class WebSocketService {
       baseHttpUrl = baseHttpUrl.replaceFirst("http://", "");
     }
 
+    // 🌟 WINDOWS PORT EXPLICIT FORCE ENGINE: Avoids fallback to default :0 routing
+    if (!kIsWeb && Platform.isWindows) {
+      if (baseHttpUrl.contains("test.ultra.winagrum.tech") && !baseHttpUrl.contains(":443")) {
+        baseHttpUrl = baseHttpUrl.replaceAll("test.ultra.winagrum.tech", "test.ultra.winagrum.tech:443");
+      } else if (baseHttpUrl.contains("winagrum.tech") && !baseHttpUrl.contains(":443")) {
+        baseHttpUrl = baseHttpUrl.replaceAll("winagrum.tech", "winagrum.tech:443");
+      }
+    }
+
     // Builds the dynamic secure matrix pipeline routing URI
     connectionUri = "$wsProtocol$baseHttpUrl/ws/live/gateway/?token=$token";
 
@@ -60,7 +73,23 @@ class WebSocketService {
 
     try {
       debugPrint("📡 CONNECTING TO CENTRAL GATEWAY PIPELINE: $url");
-      _channel = WebSocketChannel.connect(Uri.parse(url));
+
+      // 🌟 WINDOWS NATIVE SAFE HANDSHAKE ENGINE SWITCH
+      if (!kIsWeb && Platform.isWindows) {
+        _channel = IOWebSocketChannel.connect(
+          Uri.parse(url),
+          headers: {
+            'Connection': 'Upgrade',
+            'Upgrade': 'websocket',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FlutterDesktopClient',
+          },
+          customClient: HttpClient()
+            ..badCertificateCallback = (X509Certificate cert, String host, int port) => true,
+        );
+      } else {
+        // Default execution pathway fallback for Android, iOS, and standard Web
+        _channel = WebSocketChannel.connect(Uri.parse(url));
+      }
 
       _channel!.stream.listen(
             (message) {
