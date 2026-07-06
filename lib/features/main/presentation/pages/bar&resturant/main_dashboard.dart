@@ -247,13 +247,20 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
               _buildCompactGroupMenu(
                 icon: Icons.assignment_outlined,
-                label: "Salse / Purchase",
+                label: "Salse",
+                isCollapsed: isCollapsed,
+                children: [
+                  {"title": "Sales Invoice", "route": "/sales_transaction"},
+                  {"title": "Sales Reports", "route": "/sales_ledger_report"},
+                ],
+              ),
+              _buildCompactGroupMenu(
+                icon: Icons.assignment_outlined,
+                label: "Purchase",
                 isCollapsed: isCollapsed,
                 children: [
                   {"title": "Purchase Order", "route": "/purchase_order"},
-                  {"title": "Sales Invoice", "route": "/sales_transaction"},
                   {"title": "Purchase Voucher", "route": "/purchase_transaction"},
-                  {"title": "Sales Reports", "route": "/sales_ledger_report"},
                   {"title": "Purchase Reports", "route": "/purchase_ledger_report"},
                 ],
               ),

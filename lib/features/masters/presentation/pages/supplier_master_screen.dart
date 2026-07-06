@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -346,7 +344,6 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
             ),
           ),
           // Clean Search Frame
-// 💡 ALTERNATIVE: Light Background Search bar with Black Text
           Padding(
             padding: const EdgeInsets.all(12),
             child: Container(
@@ -370,7 +367,8 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                 ),
               ),
             ),
-          ),          Expanded(
+          ),
+          Expanded(
             child: BlocBuilder<SupplierBloc, SupplierState>(
               builder: (context, state) {
                 if (state is SupplierLoading) {
@@ -392,28 +390,46 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                     itemBuilder: (context, idx) {
                       final item = filteredList[idx];
                       bool isSelected = editingSupplier?.id == item.id;
-
-                      // Wrap in Material to satisfy the ListTile paint requirement
-                      return Material(
-                        color: Colors.transparent,
-                        child: ListTile(
-                          onTap: () => _populateForm(item),
-                          dense: true,
-                          selected: isSelected,
-                          selectedTileColor: const Color(0xFF1E293B),
-                          title: Text(
-                              item.name.toUpperCase(),
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                  color: isSelected ? Colors.cyanAccent : Colors.white
-                              )
+                      return GestureDetector(
+                        onTap: () => _populateForm(item),
+                        behavior: HitTestBehavior.opaque,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          margin: const EdgeInsets.symmetric(vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFF1E293B) : Colors.transparent,
+                            borderRadius: BorderRadius.zero, // Fits industrial sharp styling matrix
                           ),
-                          subtitle: Text(
-                              "Phone: ${item.mobileNo} | GST: ${item.gstNumber.isEmpty ? 'N/A' : item.gstNumber}",
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 10)
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      item.name.toUpperCase(),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                        color: isSelected ? Colors.cyanAccent : Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      "Phone: ${item.mobileNo} | GST: ${item.gstNumber.isEmpty ? 'N/A' : item.gstNumber}",
+                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 10),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 14,
+                                color: isSelected ? Colors.cyanAccent : Colors.grey,
+                              ),
+                            ],
                           ),
-                          trailing: const Icon(Icons.chevron_right_rounded, size: 14, color: Colors.grey),
                         ),
                       );
                     },
@@ -426,7 +442,6 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       ),
     );
   }
-
   Widget _buildTopActionBar(bool splitView) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

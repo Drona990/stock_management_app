@@ -99,7 +99,6 @@ class InvoicePOPdfService {
       ),
       child: pw.Row(
         children: [
-          // --- LEFT SIDE: SUPPLIER ALLOCATION INFO ---
           pw.Expanded(
             flex: 5,
             child: pw.Container(
@@ -136,8 +135,6 @@ class InvoicePOPdfService {
               ),
             ),
           ),
-
-          // --- RIGHT SIDE: PO ORDER METADATA COLUMN (Live Data Payload Keys Mapping) ---
           pw.Expanded(
             flex: 5,
             child: pw.Container(
@@ -146,18 +143,18 @@ class InvoicePOPdfService {
                 border: pw.Border(left: pw.BorderSide(width: 1)),
               ),
               child: pw.Column(
-                children: [
-                  _complexRow(
-                      "PURCHASE ORDER NO",
-                      data['po_bill_no']?.toString() ?? "N/A",
-                      "DATE",
-                      data['billdate'] ?? ""
-                  ),
-                  _complexRow("EXPECTED PKG :", data['no_of_package']?.toString() ?? "", "VALIDITY", "${data['due_date'] ?? '0'} DAYS"),
-                  _complexRow("SYSTEM TOKEN :", data['billno']?.toString() ?? "", " ", ""),
-                  _complexRow("DISPATCH BY :", data['dispatch']?.toString() ?? "", " ", ""),
-                  _complexRow("TAX preference:", data['tax_zone']?.toString() ?? "", " ", "", isLast: true),
-                ],
+                  children: [
+                    _complexRow(
+                        "PO NO",
+                        data['po_bill_no']?.toString() ?? "N/A",
+                        "PO DATE",
+                        data['billdate'] ?? ""
+                    ),
+                    _complexRow("EXPECTED PKG :", data['no_of_package']?.toString() ?? "", "VALIDITY", "${data['due_date'] ?? '0'} DAYS"),
+                    _complexRow("BILL NO :", data['billno']?.toString() ?? "", " ", ""),
+                    _complexRow("DISPATCH BY:", data['dispatch']?.toString() ?? "", " ", ""),
+                    _complexRow("TAX PREFERENCE:", data['tax_zone']?.toString() ?? "", " ", "", isLast: true),
+                  ]
               ),
             ),
           ),
@@ -263,7 +260,16 @@ class InvoicePOPdfService {
     );
   }
 
+  // ✅ UPGRADED: Dynamic cross-matching tax engine block
   static pw.Widget _buildDynamicBillingSection(Map<String, dynamic> data) {
+    final String taxZone = data['tax_zone']?.toString().toUpperCase() ?? "STATE";
+    final bool isInterstate = taxZone == "INTERSTATE";
+
+    // Dynamic resolution parameters base layer
+    final String cgstValue = isInterstate ? "0.00" : (data['cgst']?.toString() ?? "0.00");
+    final String sgstValue = isInterstate ? "0.00" : (data['sgst']?.toString() ?? "0.00");
+    final String igstValue = isInterstate ? (data['igst']?.toString() ?? "0.00") : "0.00";
+
     return pw.Row(children: [
       pw.Expanded(
         flex: 3,
@@ -286,9 +292,9 @@ class InvoicePOPdfService {
         flex: 2,
         child: pw.Column(children: [
           _calcRow("Subtotal", data['totalamount']?.toString() ?? "0"),
-          _calcRow("CGST amt", data['cgst']?.toString() ?? "0"),
-          _calcRow("SGST amt", data['sgst']?.toString() ?? "0"),
-          _calcRow("IGST amt", data['igst']?.toString() ?? "0"),
+          _calcRow("CGST amt", cgstValue),
+          _calcRow("SGST amt", sgstValue),
+          _calcRow("IGST amt", igstValue),
           _calcRow("Forwarding", data['forwading_charge']?.toString() ?? "0"),
           _calcRow("Grand Total", data['grand_totamt']?.toString() ?? "0", b: true),
         ]),

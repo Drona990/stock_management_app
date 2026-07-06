@@ -23,7 +23,6 @@ class _SplashPageState extends State<SplashPage> {
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
-    // 🌟 FIXED: Ab splash direct dashboard nahi bhejega, pehle roles validation storage se verify karega
     if (GetIt.I.isRegistered<FlutterSecureStorage>()) {
       final storage = GetIt.I<FlutterSecureStorage>();
       final token = await storage.read(key: 'access_token');
@@ -115,7 +114,7 @@ class _SplashPageState extends State<SplashPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "POWERING STOCK INTELLIGENCE",
+                  "POWERING ACCOUNTING INTELLIGENCE",
                   style: TextStyle(
                     color: cyanPrimary.withOpacity(0.7),
                     fontSize: 10,

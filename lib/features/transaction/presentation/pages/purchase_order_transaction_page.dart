@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:stock_management/features/transaction/presentation/pages/po_pdf_service.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../injection.dart';
 import '../../../masters/presentation/pages/supplier_master_screen.dart';
@@ -21,6 +22,7 @@ class PurchaseOrderRepository {
 
   Future<Map<String, dynamic>> savePurchaseOrder(Map<String, dynamic> data) async {
     final response = await apiClient.post('/api/transactions/purchase_order/', data: data);
+    print("purchase order data $response");
     return response.data as Map<String, dynamic>;
   }
 
@@ -55,6 +57,17 @@ class PurchaseOrderRepository {
       return [];
     }
   }
+
+  Future<void> updatePoStatus(dynamic id, String status) async {
+    try {
+      await apiClient.post(
+        '/api/transactions/purchase_order/$id/update-status/',
+        data: {'status': status},
+      );
+    } catch (e) {
+      throw Exception("Failed to sync status reversal over server bounds: $e");
+    }
+  }
 }
 
 // =============================================================================
@@ -64,6 +77,12 @@ abstract class PurchaseOrderEvent {}
 class PreloadNextPoNumber extends PurchaseOrderEvent {}
 class CommitPoSave extends PurchaseOrderEvent { final Map<String, dynamic> payload; CommitPoSave(this.payload); }
 class LoadPoHistoryEvent extends PurchaseOrderEvent { final String? query; LoadPoHistoryEvent({this.query}); }
+class UpdatePoStatusEvent extends PurchaseOrderEvent {
+  final dynamic poId;
+  final String status;
+  UpdatePoStatusEvent({required this.poId, required this.status});
+}
+
 
 abstract class PurchaseOrderState {}
 class PoInitial extends PurchaseOrderState {}
@@ -74,6 +93,8 @@ class PoCounterLoaded extends PurchaseOrderState { final int nextPoNo; PoCounter
 class PoSaveSuccess extends PurchaseOrderState { final Map<String, dynamic> resData; PoSaveSuccess(this.resData); }
 class PoHistoryLoadedState extends PurchaseOrderState { final List<dynamic> poList; PoHistoryLoadedState(this.poList); }
 class PoFailure extends PurchaseOrderState { final String errorMsg; PoFailure(this.errorMsg); }
+class PoStatusUpdateSuccess extends PurchaseOrderState {}
+
 
 class PurchaseOrderBloc extends Bloc<PurchaseOrderEvent, PurchaseOrderState> {
   final PurchaseOrderRepository repo;
@@ -108,9 +129,23 @@ class PurchaseOrderBloc extends Bloc<PurchaseOrderEvent, PurchaseOrderState> {
         emit(PoFailure(e.toString()));
       }
     });
+
+    // 🟢 NEW HANDLER: Captures UI actions and refreshes pipeline data streams seamlessly
+    on<UpdatePoStatusEvent>((event, emit) async {
+      emit(PoLoading()); // Shows tiny progress indicator layout context over history stack
+      try {
+        await repo.updatePoStatus(event.poId, event.status);
+        emit(PoStatusUpdateSuccess());
+
+        // Dynamic Re-load: Refreshes the logs index without manual human intervention
+        final freshHistory = await repo.fetchPoHistoryRegistry();
+        emit(PoHistoryLoadedState(freshHistory));
+      } catch (e) {
+        emit(PoFailure(e.toString()));
+      }
+    });
   }
 }
-
 // =============================================================================
 // ROW CONTROL LOGIC MATRIX
 // =============================================================================
@@ -283,7 +318,7 @@ class _PurchaseOrderTerminalFormViewState extends State<_PurchaseOrderTerminalFo
       final ByteData rawLogo = await rootBundle.load('assets/images/ultra_logo.jpeg');
       final pw.ImageProvider logoImage = pw.MemoryImage(rawLogo.buffer.asUint8List());
 
-      final pdfDoc = await InvoiceDCPdfService.generate(
+      final pdfDoc = await InvoicePOPdfService.generate(
         logoImage: logoImage,
         data: generatedPo,
         terminalMode: "PO",

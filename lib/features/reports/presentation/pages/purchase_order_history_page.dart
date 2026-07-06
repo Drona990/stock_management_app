@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../../../injection.dart';
@@ -16,6 +17,29 @@ class PurchaseOrderHistoryPage extends StatefulWidget {
 
 class _PurchaseOrderHistoryPageState extends State<PurchaseOrderHistoryPage> {
   final _searchCtrl = TextEditingController();
+
+  // ✅ Status Matrix Color Resolver Mapping Engine
+  Color _getStatusColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'COMPLETED':
+        return const Color(0xFF10B981); // Emerald Green
+      case 'CANCELLED':
+        return const Color(0xFFEF4444); // Crimson Red
+      case 'PENDING':
+      default:
+        return const Color(0xFFF59E0B); // Amber Yellow
+    }
+  }
+
+  String formatLiveDateTime(String? rawTimeStamp) {
+    if (rawTimeStamp == null || rawTimeStamp.isEmpty) return "—";
+    try {
+      DateTime parsed = DateTime.parse(rawTimeStamp).toLocal();
+      return DateFormat('dd-MM-yyyy  hh:mm a').format(parsed); // Result: 04-07-2026  12:24 PM
+    } catch (e) {
+      return rawTimeStamp;
+    }
+  }
 
   @override
   void dispose() {
@@ -84,45 +108,61 @@ class _PurchaseOrderHistoryPageState extends State<PurchaseOrderHistoryPage> {
             itemBuilder: (context, idx) {
               final item = list[idx];
               String poNoSequence = item['po_bill_no']?.toString() ?? 'N/A';
+              String currentStatus = item['status']?.toString().toUpperCase() ?? 'PENDING';
+              Color statusColor = _getStatusColor(currentStatus);
 
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                     color: Colors.white,
                     border: Border(
-                        left: const BorderSide(color: Color(0xFF047857), width: 4.5),
+                        left: BorderSide(color: statusColor, width: 4.5), // ✅ Border shifts dynamically according to tax state status bounds
                         top: BorderSide(color: Colors.grey.shade200), bottom: BorderSide(color: Colors.grey.shade200), right: BorderSide(color: Colors.grey.shade200)
                     )
                 ),
                 child: isMobile
                     ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: const Color(0xFF047857).withOpacity(0.08)), child: const Text("PO VOUCHER", style: TextStyle(color: Color(0xFF047857), fontSize: 6.5, fontWeight: FontWeight.bold))),
+                    Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(color: statusColor.withOpacity(0.08)),
+                        child: Text(currentStatus, style: TextStyle(color: statusColor, fontSize: 6.5, fontWeight: FontWeight.bold, letterSpacing: 0.3))
+                    ),
                     Text("₹ ${double.tryParse(item['grand_totamt']?.toString() ?? '0')?.toStringAsFixed(2)}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))
                   ]),
                   const SizedBox(height: 4),
                   Text(item['name']?.toString().toUpperCase() ?? '', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 5),
                   Wrap(spacing: 4, runSpacing: 2, children: [
-                    _infoLabel("SERIAL NO", poNoSequence, active: true), _bullet(),
-                    _infoLabel("DOC ID", item['billno'] ?? ''), _bullet(),
-                    _infoLabel("DATE", item['billdate'] ?? ''),
+                    _infoLabel("BILL DATE", formatLiveDateTime(item['billdate'])),
+                    _infoLabel("BILL NO", item['billno'] ?? ''), _bullet(),
+                    _infoLabel("BILL DATE", item['billdate'] ?? ''),
                   ]),
-                  const SizedBox(height: 6),
-                  Align(alignment: Alignment.bottomRight, child: _buildReprintButton(item)),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildStatusDropdownButton(context, item['id'], currentStatus, statusColor),
+                      _buildReprintButton(item)
+                    ],
+                  ),
                 ])
                     : Row(children: [
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
                       Text(item['name']?.toString().toUpperCase() ?? '', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
                       const SizedBox(width: 8),
-                      Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: const Color(0xFF047857).withOpacity(0.08)), child: const Text("PO VOUCHER", style: TextStyle(color: Color(0xFF047857), fontSize: 6.5, fontWeight: FontWeight.bold))),
+                      Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(color: statusColor.withOpacity(0.08)),
+                          child: Text(currentStatus, style: TextStyle(color: statusColor, fontSize: 6.5, fontWeight: FontWeight.bold, letterSpacing: 0.2))
+                      ),
                     ]),
                     const SizedBox(height: 5),
                     Row(children: [
                       _infoLabel("SERIAL NO", poNoSequence, active: true), _bullet(),
-                      _infoLabel("DOC ID", item['billno'] ?? ''), _bullet(),
-                      _infoLabel("PLACEMENT DATE", item['billdate'] ?? ''),
+                      _infoLabel("BILL NO", item['billno'] ?? ''), _bullet(),
+                      _infoLabel("BILL DATA DATE", item['billdate'] ?? ''),
                     ])
                   ])),
                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -130,6 +170,8 @@ class _PurchaseOrderHistoryPageState extends State<PurchaseOrderHistoryPage> {
                     Text("${double.tryParse(item['total_pcs']?.toString() ?? '0')?.toStringAsFixed(0)} PCS ORDERED", style: const TextStyle(fontSize: 7.5, color: Colors.grey))
                   ]),
                   const SizedBox(width: 16),
+                  _buildStatusDropdownButton(context, item['id'], currentStatus, statusColor),
+                  const SizedBox(width: 8),
                   _buildReprintButton(item)
                 ]),
               );
@@ -144,6 +186,44 @@ class _PurchaseOrderHistoryPageState extends State<PurchaseOrderHistoryPage> {
     );
   }
 
+  // ✅ NEW WIDGET: Dynamic Status Action Controller Dropdown Button
+  Widget _buildStatusDropdownButton(BuildContext context, dynamic poId, String currentStatus, Color statusColor) {
+    return Container(
+      height: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: statusColor.withOpacity(0.4)),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: currentStatus,
+          icon: Icon(Icons.arrow_drop_down_rounded, size: 14, color: statusColor),
+          style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: statusColor),
+          onChanged: (String? nextStatus) {
+            if (nextStatus != null && nextStatus != currentStatus) {
+              // 🟢 Triggers status patch event stream to core Django Viewset endpoint
+              context.read<PurchaseOrderBloc>().add(
+                  UpdatePoStatusEvent(poId: poId, status: nextStatus)
+              );
+            }
+          },
+          items: <String>['PENDING', 'COMPLETED', 'CANCELLED']
+              .map<DropdownMenuItem<String>>((String val) {
+            return DropdownMenuItem<String>(
+              value: val,
+              child: Text(
+                val == 'COMPLETED' ? 'CLOSED / OK' : val,
+                style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: _getStatusColor(val)),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildReprintButton(Map<String, dynamic> item) {
     return InkWell(
       onTap: () async {
@@ -155,8 +235,9 @@ class _PurchaseOrderHistoryPageState extends State<PurchaseOrderHistoryPage> {
         } catch (_) {}
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: const Color(0xFFF1F5F9), border: Border.all(color: Colors.grey.shade300)),
-        child: const Row(children: [Icon(Icons.print_rounded, color: Color(0xFF475569), size: 11), SizedBox(width: 4), Text("REPRINT PO", style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Color(0xFF475569)))]),
+        height: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 10), decoration: BoxDecoration(color: const Color(0xFFF1F5F9), border: Border.all(color: Colors.grey.shade300)),
+        child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.print_rounded, color: Color(0xFF475569), size: 11), SizedBox(width: 4), Text("REPRINT PO", style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Color(0xFF475569)))]),
       ),
     );
   }
