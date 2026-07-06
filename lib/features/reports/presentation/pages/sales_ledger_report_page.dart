@@ -103,28 +103,34 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
     pdf.addPage(
         pw.MultiPage(
             pageFormat: PdfPageFormat.a4.landscape,
-            margin: const pw.EdgeInsets.all(24),
+            margin: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 20),
             build: (pw.Context context) {
               return [
+                // System Identity Master Header Block
                 pw.Header(
                     level: 0,
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 1.0)),
+                    ),
+                    padding: const pw.EdgeInsets.only(bottom: 6), // Fixed geometry property call
                     child: pw.Row(
-                        mainAxisAlignment:  pw.MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
                           pw.Column(
-                              crossAxisAlignment:  pw.CrossAxisAlignment.start,
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
                               children: [
-                                pw.Text("SALES AUDIT REPORT SYSTEM", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                                pw.Text("SALES AUDIT REPORT SYSTEM", style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
                                 pw.SizedBox(height: 2),
-                                pw.Text("REAL-TIME TAX COMPLIANCE ACCOUNTING LEDGER DIRECTORY", style: pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
+                                pw.Text("REAL-TIME TAX COMPLIANCE ACCOUNTING LEDGER DIRECTORY", style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
                               ]
                           ),
-                          pw.Text("Generated: ${DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600))
+                          pw.Text("Generated: ${DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600))
                         ]
                     )
                 ),
-                pw.SizedBox(height: 14),
+                pw.SizedBox(height: 10),
 
+                // Core Data Table Generator Setup
                 ...groupedData.entries.map((entry) {
                   String date = entry.key;
                   List txns = entry.value;
@@ -136,91 +142,102 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
                   double subTotal = txns.fold(0.0, (sum, i) => sum + parseNum(i['grand_total']));
 
                   return pw.Column(
-                      crossAxisAlignment:  pw.CrossAxisAlignment.start,
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                          child: pw.Text(date, style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+                          padding: const pw.EdgeInsets.only(top: 8, bottom: 4),
+                          child: pw.Text(date, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
                         ),
                         pw.Table(
-                            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+                            // Industrial grid layout ratio mapping featuring the Invoice Identity Column
                             columnWidths: {
-                              0: const pw.FlexColumnWidth(3),
-                              1: const pw.FlexColumnWidth(1),
-                              2: const pw.FlexColumnWidth(1),
-                              3: const pw.FlexColumnWidth(1),
-                              4: const pw.FlexColumnWidth(1),
-                              5: const pw.FlexColumnWidth(1),
+                              0: const pw.FlexColumnWidth(1.8), // Inv / Bill Number Column Space
+                              1: const pw.FlexColumnWidth(3.2), // Party Corporate Identifier Name
+                              2: const pw.FlexColumnWidth(1.2), // Taxable base value
+                              3: const pw.FlexColumnWidth(1.0), // Central GST value
+                              4: const pw.FlexColumnWidth(1.0), // State GST value
+                              5: const pw.FlexColumnWidth(1.0), // Integrated IGST value
+                              6: const pw.FlexColumnWidth(1.3), // Combined total amount value
                             },
                             children: [
+                              // Industrial Table Header
                               pw.TableRow(
-                                  decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
                                   children: [
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("PARTY NAME", style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("TAXABLE", style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("CGST", style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("SGST", style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("IGST", style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("TOTAL", style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("INV / BILL NO", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("PARTY NAME", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("TAXABLE", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("CGST", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("SGST", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("IGST", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("TOTAL", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
                                   ]
                               ),
+
+                              // Transaction Rows Mapping
                               ...txns.map((txn) {
                                 bool localState = _isState(txn);
+                                String billNumber = txn['inv_bill_no']?.toString() ?? txn['inv_no']?.toString() ?? '-';
+
                                 return pw.TableRow(
                                     children: [
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(txn['party_name']?.toString().toUpperCase() ?? '', style: const pw.TextStyle(fontSize: 7))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(parseNum(txn['total_taxable']).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 7))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(localState ? parseNum(txn['cgst']).toStringAsFixed(2) : "0.00", style: const pw.TextStyle(fontSize: 7))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(localState ? parseNum(txn['sgst']).toStringAsFixed(2) : "0.00", style: const pw.TextStyle(fontSize: 7))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(!localState ? parseNum(txn['igst']).toStringAsFixed(2) : "0.00", style: const pw.TextStyle(fontSize: 7))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(parseNum(txn['grand_total']).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 7))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(billNumber, style: const pw.TextStyle(fontSize: 6.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(txn['party_name']?.toString().toUpperCase() ?? '', style: const pw.TextStyle(fontSize: 6.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(parseNum(txn['total_taxable']).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 6.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(localState ? parseNum(txn['cgst']).toStringAsFixed(2) : "0.00", style: const pw.TextStyle(fontSize: 6.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(localState ? parseNum(txn['sgst']).toStringAsFixed(2) : "0.00", style: const pw.TextStyle(fontSize: 6.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(!localState ? parseNum(txn['igst']).toStringAsFixed(2) : "0.00", style: const pw.TextStyle(fontSize: 6.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(parseNum(txn['grand_total']).toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
                                     ]
                                 );
                               }),
+
+                              // Grouped Date Block Subtotal Summary Row
                               pw.TableRow(
+                                  decoration: const pw.BoxDecoration(color: PdfColors.grey50),
                                   children: [
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("Subtotal:", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalTaxable.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalCgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalSgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalIgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(subTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+                                    // Safe multi-column cell spacing separation mapping
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("", style: const pw.TextStyle(fontSize: 6.5))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("Subtotal:", style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold)))),
+
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalTaxable.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalCgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalSgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalIgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(subTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey900))),
                                   ]
                               )
                             ]
                         ),
-                        pw.SizedBox(height: 8),
+                        pw.SizedBox(height: 6),
                       ]
                   );
                 }).toList(),
 
-                pw.SizedBox(height: 10),
-                // FIXED: Container wrapped with a standard Box decoration layer for standard compiler safety boundary controls
-                pw.Container(
-                  decoration: const pw.BoxDecoration(
-                    color: PdfColors.grey300,
-                  ),
-                ),
+                pw.SizedBox(height: 8),
+
+                // Grand Summary Panel Block Layout Anchor
                 pw.Table(
-                    border: pw.TableBorder.all(color: PdfColors.black, width: 0.8),
+                    border: pw.TableBorder.all(color: PdfColors.black, width: 1),
                     columnWidths: {
-                      0: const pw.FlexColumnWidth(3),
-                      1: const pw.FlexColumnWidth(1),
-                      2: const pw.FlexColumnWidth(1),
-                      3: const pw.FlexColumnWidth(1),
-                      4: const pw.FlexColumnWidth(1),
-                      5: const pw.FlexColumnWidth(1),
+                      0: const pw.FlexColumnWidth(5.0), // Merged layout weight balance matching columns 0 & 1 (1.8 + 3.2)
+                      1: const pw.FlexColumnWidth(1.2),
+                      2: const pw.FlexColumnWidth(1.0),
+                      3: const pw.FlexColumnWidth(1.0),
+                      4: const pw.FlexColumnWidth(1.0),
+                      5: const pw.FlexColumnWidth(1.3),
                     },
                     children: [
                       pw.TableRow(
                           decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                           children: [
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("GRAND TOTAL:", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandTaxable.toStringAsFixed(2), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandCgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandSgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandIgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandTotalVal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.green800))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("GRAND TOTALS:", style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.black)))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandTaxable.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandCgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandSgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandIgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandTotalVal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.green800))),
                           ]
                       )
                     ]
@@ -236,7 +253,6 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
         format: PdfPageFormat.a4.landscape
     );
   }
-
   static bool _isState(dynamic txn) {
     final zone = txn['tax_zone']?.toString().toUpperCase() ?? 'STATE';
     return zone == 'STATE';
@@ -361,6 +377,7 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
     return 0.0;
   }
 
+/*
   Widget _buildAuditReportList(List<dynamic> filteredList, Map<String, List<dynamic>> grouped, double grandTaxable, double grandCgst, double grandSgst, double grandIgst, double grandTotalVal) {
     if (_isAuditLoading) return const Center(child: CircularProgressIndicator(strokeWidth: 1.5));
     if (filteredList.isEmpty) {
@@ -446,6 +463,7 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
                       padding: const EdgeInsets.symmetric(vertical: 3.0),
                       child: Row(
                         children: [
+                          Expanded(flex: 3, child: Text(index['inv_bill_no']?.toString().toUpperCase() ?? '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155)))),
                           Expanded(flex: 3, child: Text(txn['party_name']?.toString().toUpperCase() ?? '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155)))),
                           Expanded(child: Text(parseNum(txn['total_taxable']).toStringAsFixed(2), style: const TextStyle(fontSize: 10, color: Color(0xFF334155)))),
                           Expanded(child: Text(localState ? parseNum(txn['cgst']).toStringAsFixed(2) : "0.00", style: const TextStyle(fontSize: 10, color: Color(0xFF334155)))),
@@ -487,7 +505,138 @@ class _SalesLedgerReportPageState extends State<SalesLedgerReportPage> {
       ],
     );
   }
+*/
+  Widget _buildAuditReportList(List<dynamic> filteredList, Map<String, List<dynamic>> grouped, double grandTaxable, double grandCgst, double grandSgst, double grandIgst, double grandTotalVal) {
+    if (_isAuditLoading) return const Center(child: CircularProgressIndicator(strokeWidth: 1.5));
+    if (filteredList.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.assignment_late_outlined, size: 22, color: Colors.grey),
+            SizedBox(height: 6),
+            Text("No reports trace found matching query text parameters.", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
 
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 24.0, right: 24, top: 12.0, bottom: 4.0),
+          child: Row(
+            children: const [
+              // ALIGNED: Header layout updated to accommodate Bill No matrix column spacing safely
+              Expanded(flex: 1, child: Text("BILL NO", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
+              Expanded(flex: 3, child: Text("PARTY NAME", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
+              Expanded(child: Text("TAXABLE", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
+              Expanded(child: Text("CGST", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
+              Expanded(child: Text("SGST", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
+              Expanded(child: Text("IGST", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
+              Expanded(child: Text("TOTAL", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Divider(thickness: 1),
+        ),
+
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            itemCount: grouped.length + 1,
+            itemBuilder: (context, index) {
+              if (index == grouped.length) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 14.0, bottom: 28.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        border: Border.all(color: const Color(0xFF94A3B8), width: 1.5)
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    child: Row(
+                      children: [
+                        // ALIGNED: Matches combined space of BILL NO (1) + PARTY NAME (3) columns
+                        const Expanded(flex: 4, child: Text("GRAND TOTALS:", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF0F172A)))),
+                        Expanded(child: Text(grandTaxable.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF0F172A)))),
+                        Expanded(child: Text(grandCgst.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF0F172A)))),
+                        Expanded(child: Text(grandSgst.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF0F172A)))),
+                        Expanded(child: Text(grandIgst.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF0F172A)))),
+                        Expanded(child: Text(grandTotalVal.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF16A34A)))),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              String date = grouped.keys.elementAt(index);
+              List txns = grouped[date]!;
+
+              double totalTaxable = txns.fold(0.0, (sum, i) => sum + parseNum(i['total_taxable']));
+              double totalCgst = txns.fold(0.0, (sum, i) => sum + (_isState(i) ? parseNum(i['cgst']) : 0.0));
+              double totalSgst = txns.fold(0.0, (sum, i) => sum + (_isState(i) ? parseNum(i['sgst']) : 0.0));
+              double totalIgst = txns.fold(0.0, (sum, i) => sum + (!_isState(i) ? parseNum(i['igst']) : 0.0));
+              double subTotal = txns.fold(0.0, (sum, i) => sum + parseNum(i['grand_total']));
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6.0),
+                    child: Text(date, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: Color(0xFF0F172A))),
+                  ),
+                  ...txns.map((txn) {
+                    bool localState = _isState(txn);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3.0),
+                      child: Row(
+                        children: [
+                          // ADDED & ALIGNED: Displays sequential record bill index value properly
+                          Expanded(flex: 1, child: Text(txn['inv_bill_no']?.toString() ?? '-', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155)))),
+                          Expanded(flex: 3, child: Text(txn['party_name']?.toString().toUpperCase() ?? '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155)))),
+                          Expanded(child: Text(parseNum(txn['total_taxable']).toStringAsFixed(2), style: const TextStyle(fontSize: 10, color: Color(0xFF334155)))),
+                          Expanded(child: Text(localState ? parseNum(txn['cgst']).toStringAsFixed(2) : "0.00", style: const TextStyle(fontSize: 10, color: Color(0xFF334155)))),
+                          Expanded(child: Text(localState ? parseNum(txn['sgst']).toStringAsFixed(2) : "0.00", style: const TextStyle(fontSize: 10, color: Color(0xFF334155)))),
+                          Expanded(child: Text(!localState ? parseNum(txn['igst']).toStringAsFixed(2) : "0.00", style: const TextStyle(fontSize: 10, color: Color(0xFF334155)))),
+                          Expanded(child: Text(parseNum(txn['grand_total']).toStringAsFixed(2), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)))),
+                        ],
+                      ),
+                    );
+                  }),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6.0, bottom: 16.0),
+                    child: Container(
+                      decoration: const BoxDecoration(
+                          border: Border(
+                              bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                              top: BorderSide(color: Color(0xFFE2E8F0))
+                          )
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          // ALIGNED: Subtotal empty column matches combined BILL NO (1) + PARTY NAME (3) blocks
+                          const Expanded(flex: 4, child: SizedBox()),
+                          Expanded(child: Text(totalTaxable.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF1E293B)))),
+                          Expanded(child: Text(totalCgst.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF1E293B)))),
+                          Expanded(child: Text(totalSgst.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF1E293B)))),
+                          Expanded(child: Text(totalIgst.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF1E293B)))),
+                          Expanded(child: Text(subTotal.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF475569)))),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
   Widget _buildTopStats(bool isMobile) {
     return BlocBuilder<LedgerBloc, LedgerState>(
       builder: (context, state) {
