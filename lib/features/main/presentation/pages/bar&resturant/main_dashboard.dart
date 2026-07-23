@@ -1,5 +1,5 @@
-
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
@@ -28,6 +28,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   String _initials = "U";
   bool _isReady = false;
 
+  // 🌟 User Allowed Routes Memory Matrix
+  Set<String> _userAllowedRoutes = {};
+
   final Map<String, bool> _expandedGroups = {
     "Account Master": false,
     "Transactions": false,
@@ -47,16 +50,25 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final role = await storage.read(key: 'user_role') ?? "staff";
       final name = await storage.read(key: 'username') ?? "User";
 
+      // 🌟 Fetch user permissions matrix from secure storage
+      final rawRoutes = await storage.read(key: 'user_allowed_routes');
+      Set<String> allowed = {'/dashboard'}; // Default route fallback
+
+      if (rawRoutes != null) {
+        final List<dynamic> parsed = jsonDecode(rawRoutes);
+        allowed = parsed.cast<String>().toSet();
+      }
+
       if (mounted) {
         setState(() {
           _userRole = role.toLowerCase().trim();
           _userName = name;
           _initials = name.isNotEmpty ? name[0].toUpperCase() : "U";
+          _userAllowedRoutes = allowed; // Set allowed routes
           _isReady = true;
         });
 
-        // 🌟 REAL-TIME CENTRAL CONNECTION TRIGGER:
-        // Layout build hote hi framework frame validation ke baad socket open karega
+        // 🌟 REAL-TIME CENTRAL CONNECTION TRIGGER
         WidgetsBinding.instance.addPostFrameCallback((_) {
           sl<WebSocketService>().initCentralGateway();
         });
@@ -68,7 +80,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   @override
   void dispose() {
-    // 🌟 CLEANUP: User agar is layout scope se baahar jaye toh gateway channel safely close ho
     sl<WebSocketService>().closeGateway();
     super.dispose();
   }
@@ -99,7 +110,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeInOut,
-                  width: shouldCollapseSidebar ? 64 : 240, // Strict ERP compact width metrics
+                  width: shouldCollapseSidebar ? 64 : 240,
                   color: darkSlateBg,
                   child: _buildSidebarContent(shouldCollapseSidebar, isMobile),
                 ),
@@ -128,7 +139,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return AppBar(
       elevation: 0,
       backgroundColor: Colors.white,
-      toolbarHeight: 56, // Symmetrical compact ERP standard height
+      toolbarHeight: 56,
       iconTheme: const IconThemeData(color: darkSlateBg, size: 18),
       leading: isMobile
           ? null
@@ -215,11 +226,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             padding: const EdgeInsets.symmetric(horizontal: 8),
             physics: const ClampingScrollPhysics(),
             children: [
-              _buildRawNavItem(Icons.analytics_outlined, "Dashboard", "/dashboard", isCollapsed),
+              if (_userRole == 'superuser' || _userAllowedRoutes.contains("/dashboard"))
+                _buildRawNavItem(Icons.analytics_outlined, "Dashboard", "/dashboard", isCollapsed),
               const SizedBox(height: 4),
 
               // 1. ACCOUNTING SUB-SYSTEM
-              _buildCompactGroupMenu(
+              _buildDynamicGroupMenu(
                 icon: Icons.account_balance_wallet_outlined,
                 label: "Account Master",
                 isCollapsed: isCollapsed,
@@ -233,7 +245,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
               const SizedBox(height: 4),
 
-              _buildCompactGroupMenu(
+              _buildDynamicGroupMenu(
                 icon: Icons.assignment_outlined,
                 label: "Delivery Challan",
                 isCollapsed: isCollapsed,
@@ -245,7 +257,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
               const SizedBox(height: 4),
 
-              _buildCompactGroupMenu(
+              _buildDynamicGroupMenu(
                 icon: Icons.assignment_outlined,
                 label: "Sales",
                 isCollapsed: isCollapsed,
@@ -254,7 +266,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   {"title": "Sales Reports", "route": "/sales_ledger_report"},
                 ],
               ),
-              _buildCompactGroupMenu(
+
+              _buildDynamicGroupMenu(
                 icon: Icons.assignment_outlined,
                 label: "Purchase",
                 isCollapsed: isCollapsed,
@@ -266,7 +279,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               ),
 
               const SizedBox(height: 4),
-              _buildCompactGroupMenu(
+
+              _buildDynamicGroupMenu(
                 icon: Icons.assignment_outlined,
                 label: "Transactions",
                 isCollapsed: isCollapsed,
@@ -276,23 +290,26 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   {"title": "Journal Entry", "route": "/journal_entry"},
                 ],
               ),
+
               const SizedBox(height: 4),
-              _buildCompactGroupMenu(
+
+              _buildDynamicGroupMenu(
                 icon: Icons.assignment_outlined,
                 label: "Job Work",
                 isCollapsed: isCollapsed,
                 children: [
                   {"title": "Material Type Master", "route": "/material_type_master"},
                   {"title": "Material Master", "route": "/material_master"},
-                  {"title": "BOM Entry","route":"/bom_entry"},
-                  {"title": "BOM Project Config","route":"/project_bom"},
+                  {"title": "BOM Entry", "route": "/bom_entry"},
+                  {"title": "BOM Project Config", "route": "/project_bom"},
                   {"title": "BOM History", "route": "/bom_history"},
                 ],
               ),
+
               const SizedBox(height: 4),
 
               // 3. INDUSTRIAL REPORT LOGISTICS
-              _buildCompactGroupMenu(
+              _buildDynamicGroupMenu(
                 icon: Icons.assessment_outlined,
                 label: "Reports Center",
                 isCollapsed: isCollapsed,
@@ -301,6 +318,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   {"title": "Debit / Credit Note History", "route": "/financial_note_summary"},
                 ],
               ),
+
               const SizedBox(height: 4),
 
               if (_userRole == 'superuser') ...[
@@ -311,24 +329,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   children: [
                     {"title": "User Details", "route": "/manage_user"},
                     {"title": "Manage Session", "route": "/manage_session"},
+                    {"title": "Manage Permission", "route": "/manage_permission"},
                   ],
                 ),
               ],
-/*
-              if (_userRole == 'superuser') ...[
-                _buildCompactGroupMenu(
-                  icon: Icons.manage_accounts_outlined,
-                  label: "Manage Users",
-                  isCollapsed: isCollapsed,
-                  children: [
-                    {"title": "User Details", "route": "/manage_user"},
-                    {"title": "Manage Session", "route": "/manage_session"},
-                  ],
-                ),
-                _buildRawNavItem(Icons.manage_accounts_outlined, "Manage Users", "/manage_user", isCollapsed),
-              ],
-*/
-
             ],
           ),
         ),
@@ -336,7 +340,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         // Bottom Control Bar
         Container(
           padding: const EdgeInsets.all(8),
-          color: const Color(0xFF0F172A), // Darker accent footer cap
+          color: const Color(0xFF0F172A),
           child: _buildLogoutButton(isCollapsed),
         ),
       ],
@@ -344,9 +348,34 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   // ==========================================================================
+  // ⚡ DYNAMIC PERMISSION WRAPPER HELPER
+  // ==========================================================================
+  Widget _buildDynamicGroupMenu({
+    required IconData icon,
+    required String label,
+    required bool isCollapsed,
+    required List<Map<String, String>> children,
+  }) {
+    // Superuser gets full access, normal staff routes are filtered dynamically
+    final accessibleChildren = _userRole == 'superuser'
+        ? children
+        : children.where((child) => _userAllowedRoutes.contains(child["route"])).toList();
+
+    if (accessibleChildren.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return _buildCompactGroupMenu(
+      icon: icon,
+      label: label,
+      isCollapsed: isCollapsed,
+      children: accessibleChildren,
+    );
+  }
+
+  // ==========================================================================
   // ⚡ CORE INTERFACE HELPER GENERATORS
   // ==========================================================================
-
   Widget _buildCompactGroupMenu({
     required IconData icon,
     required String label,
@@ -357,7 +386,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final bool hasActiveChild = children.any((element) => element["route"] == currentPath);
     final bool isGroupOpen = _expandedGroups[label] ?? false;
 
-    // 🏮 MINI SIDEBAR STATE: Hover/Click Popover Dropdown Controller Matrix
     if (isCollapsed) {
       return PopupMenuButton<String>(
         tooltip: label,
@@ -379,8 +407,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 style: TextStyle(
                     fontSize: 11,
                     fontWeight: isSubSelected ? FontWeight.bold : FontWeight.w500,
-                    color: isSubSelected ? cyanPrimary : darkSlateBg
-                ),
+                    color: isSubSelected ? cyanPrimary : darkSlateBg),
               ),
             );
           }).toList();
@@ -388,7 +415,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       );
     }
 
-    // 💻 EXTENDED SIDEBAR STATE: Animated Collapsible Tree Layout
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -406,10 +432,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 Icon(icon, size: 16, color: hasActiveChild ? cyanPrimary : textMuted),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                      label,
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: hasActiveChild ? Colors.white : const Color(0xFFCBD5E1), letterSpacing: 0.2)
-                  ),
+                  child: Text(label,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: hasActiveChild ? Colors.white : const Color(0xFFCBD5E1),
+                          letterSpacing: 0.2)),
                 ),
                 Icon(
                   isGroupOpen ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
@@ -420,8 +448,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             ),
           ),
         ),
-
-        // Smooth architectural child lists rollout
         if (isGroupOpen)
           Padding(
             padding: const EdgeInsets.only(top: 2, bottom: 4),
@@ -511,8 +537,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                   color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
-                  letterSpacing: 0.2
-              ),
+                  letterSpacing: 0.2),
             ),
           ],
         ),
@@ -559,7 +584,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   // ==========================================================================
   Future<void> _executeSignOutPipeline() async {
     sl<WebSocketService>().closeGateway();
-
     await storage.deleteAll();
     if (mounted) context.go('/login');
   }

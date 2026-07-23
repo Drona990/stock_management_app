@@ -5,6 +5,7 @@ import 'package:get_it/get_it.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:stock_management/features/auth/presentation/pages/create_superuser.dart';
 import 'package:stock_management/features/auth/presentation/pages/login_page.dart';
+import 'package:stock_management/features/main/presentation/pages/bar&resturant/user_permissions_page.dart';
 import 'package:stock_management/features/managment/presentation/pages/session_management_page.dart';
 import 'package:stock_management/features/masters/presentation/pages/material_type_master_page.dart';
 import 'package:stock_management/features/masters/presentation/pages/uom_master_screen.dart';
@@ -138,6 +139,7 @@ class AppRouter {
           GoRoute(path: '/dashboard', builder: (context, state) => const StockDashboardView()),
           GoRoute(path: '/manage_user', builder: (context, state) => const UserManagementPage()),
           GoRoute(path: '/manage_session', builder: (context, state) => const SessionManagementPage()),
+          GoRoute(path: '/manage_permission', builder: (context, state) => const UserPermissionsScreen()),
           GoRoute(path: '/dc_terminal', builder: (context, state) => const DynamicTerminalScreen()),
         ],
       ),
