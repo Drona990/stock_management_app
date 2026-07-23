@@ -247,7 +247,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
               _buildCompactGroupMenu(
                 icon: Icons.assignment_outlined,
-                label: "Salse",
+                label: "Sales",
                 isCollapsed: isCollapsed,
                 children: [
                   {"title": "Sales Invoice", "route": "/sales_transaction"},

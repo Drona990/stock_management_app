@@ -41,8 +41,10 @@ class _StockDashboardViewState extends State<StockDashboardView> {
       final projectResponse = await _apiClient.get('/api/erp/project-dashboard-status/');
 
       final salesLedgerResponse = await _apiClient.get('/api/transactions/ledger-report/?type=SALES');
+      print("salse report outstanding $salesLedgerResponse");
 
       final purchaseLedgerResponse = await _apiClient.get('/api/transactions/ledger-report/?type=PURCHASE');
+      print("purchase report outstanding $purchaseLedgerResponse");
 
       final poDashboardResponse = await _apiClient.get('/api/transactions/purchase_order/dashboard_overview/');
 
@@ -66,13 +68,23 @@ class _StockDashboardViewState extends State<StockDashboardView> {
 
       // --- PROCESS ACCOUNTING LEDGER REPORT STREAMS ---
       double parsedCustomerOutstanding = 0.0;
-      if (salesLedgerResponse.data != null && salesLedgerResponse.data['summary'] != null) {
-        parsedCustomerOutstanding = double.tryParse(salesLedgerResponse.data['summary']['closing_balance']?.toString() ?? '0.0') ?? 0.0;
+      try {
+        if (salesLedgerResponse.data != null && salesLedgerResponse.data['summary'] != null) {
+          var closingBal = salesLedgerResponse.data['summary']['closing_balance'];
+          parsedCustomerOutstanding = double.tryParse(closingBal.toString()) ?? 0.0;
+        }
+      } catch (e) {
+        dev.log("❌ Error parsing sales metrics: $e");
       }
 
       double parsedSupplierOutstanding = 0.0;
-      if (purchaseLedgerResponse.data != null && purchaseLedgerResponse.data['summary'] != null) {
-        parsedSupplierOutstanding = double.tryParse(purchaseLedgerResponse.data['summary']['closing_balance']?.toString() ?? '0.0') ?? 0.0;
+      try {
+        if (purchaseLedgerResponse.data != null && purchaseLedgerResponse.data['summary'] != null) {
+          var closingBal = purchaseLedgerResponse.data['summary']['closing_balance'];
+          parsedSupplierOutstanding = double.tryParse(closingBal.toString()) ?? 0.0;
+        }
+      } catch (e) {
+        dev.log("❌ Error parsing purchase metrics: $e");
       }
 
       // 🟢 NEW: Extracting Live Pending Count from API Response
@@ -88,7 +100,7 @@ class _StockDashboardViewState extends State<StockDashboardView> {
 
         customerOutstandingAmount = parsedCustomerOutstanding;
         supplierOutstandingAmount = parsedSupplierOutstanding;
-        monthlyExpensesAmount = parsedCustomerOutstanding * 0.15;
+        monthlyExpensesAmount = 00.00;
 
         // 🟢 Direct Binding to your dashboard card counter variable
         pendingPurchaseOrdersCount = livePendingPoCount;

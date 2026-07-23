@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -20,14 +21,90 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
   DateTimeRange? _dateRange;
   int? _hoveredRowIndex;
   String _searchQuery = "";
+
+  // View State Variables
   bool _isAuditMode = false;
+  bool _isSupplierLedgerMode = false;
+
   List<dynamic> _cachedAuditData = [];
   bool _isAuditLoading = false;
+
+  // Real API Server State Variables
+  List<dynamic> _suppliersList = [];
+  bool _isSuppliersLoading = false;
+  String? _selectedSupplierId;
+
+  Map<String, dynamic>? _serverPartySummary;
+  List<dynamic> _serverLedgerEntries = [];
+  bool _isLedgerEntriesLoading = false;
 
   @override
   void initState() {
     super.initState();
     _fetchAuditData();
+    _fetchSuppliers();
+  }
+
+  // 🟢 Strictly fetches only suppliers matching accounting ledger definitions
+  Future<void> _fetchSuppliers() async {
+    setState(() => _isSuppliersLoading = true);
+    try {
+      final response = await sl<ApiClient>().get(
+          '/api/master/ledger/',
+          query: {'group': 'SUNDRY CREDITOR'}
+      );
+
+      if (response.data != null) {
+        setState(() {
+          if (response.data['results'] != null) {
+            _suppliersList = response.data['results'] as List;
+          } else if (response.data['data'] != null) {
+            _suppliersList = response.data['data'] as List;
+          } else if (response.data is List) {
+            _suppliersList = response.data as List;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching supplier masters: $e");
+    } finally {
+      setState(() => _isSuppliersLoading = false);
+    }
+  }
+
+  // 🟢 Chronological Account Book retrieval engine
+  Future<void> _fetchLedgerWiseStatement(String ledgerId) async {
+    setState(() => _isLedgerEntriesLoading = true);
+    try {
+      final Map<String, dynamic> queryParameters = {
+        'ledger_id': ledgerId,
+        'party_type': 'SUPPLIER',
+      };
+
+      if (_dateRange != null) {
+        queryParameters['from_date'] = DateFormat('yyyy-MM-dd').format(_dateRange!.start);
+        queryParameters['to_date'] = DateFormat('yyyy-MM-dd').format(_dateRange!.end);
+      }
+
+      final response = await sl<ApiClient>().get(
+        '/api/transactions/ledger-statement/',
+        query: queryParameters,
+      );
+
+      print("ledger statement data $response");
+
+      if (response.data != null && response.data['status'] == 'success') {
+        setState(() {
+          _serverPartySummary = response.data['party'];
+          _serverLedgerEntries = response.data['ledger_entries'] as List;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching statement logs: $e");
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to fetch ledger details: $e"), backgroundColor: Colors.red));
+    } finally {
+      setState(() => _isLedgerEntriesLoading = false);
+    }
   }
 
   Future<void> _fetchAuditData() async {
@@ -36,7 +113,6 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
       final response = await sl<ApiClient>().get('/api/transactions/salse-purchase-audit-report/');
       if (response.data != null && response.data['data'] != null) {
         setState(() {
-          // Strict filtering out any non-purchase entries directly at ingestion boundaries
           _cachedAuditData = (response.data['data'] as List)
               .where((txn) => txn['txn_type']?.toString().toUpperCase() == "PURCHASE")
               .toList();
@@ -96,115 +172,125 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
     }
   }
 
-  // --- 3. PRINT LANDSCAPE PDF INCORPORATING INTERSTATE/STATE ZONES AND BOTTOM CALCULATED GRAND TOTALS ---
-  Future<void> _generateAuditReportPdf(Map<String, List<dynamic>> groupedData, double grandTaxable, double grandCgst, double grandSgst, double grandIgst, double grandTotalVal) async {
+  // 1. PURCHASE AUDIT REPORT - FIXED FOR PORTRAIT & CURRENCY SYMBOL
+  Future<void> _generateAuditReportPdf(
+      Map<String, List<dynamic>> groupedData,
+      double grandTaxable,
+      double grandCgst,
+      double grandSgst,
+      double grandIgst,
+      double grandTotalVal
+      ) async {
     final pdf = pw.Document();
+
+    // Font fetch logic for Currency Symbol (₹)
+    final ttfFont = await PdfGoogleFonts.notoSansRegular();
+    final boldTtfFont = await PdfGoogleFonts.notoSansBold();
+
+    const String currencySymbol = "₹ ";
 
     pdf.addPage(
         pw.MultiPage(
-            pageFormat: PdfPageFormat.a4.landscape,
-            margin: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            pageFormat: PdfPageFormat.a4, // FIXED: Landscape hata kar Portrait kiya
+            margin: const pw.EdgeInsets.symmetric(horizontal: 15, vertical: 20), // Margins optimized for portrait
+            theme: pw.ThemeData.withFont(
+              base: ttfFont,
+              bold: boldTtfFont,
+            ),
             build: (pw.Context context) {
               return [
-                // System Identity Master Header Block
                 pw.Header(
                     level: 0,
-                    decoration: const pw.BoxDecoration(
-                      border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 1.0)),
-                    ),
-                    padding: const pw.EdgeInsets.only(bottom: 6), // 🟢 FIXED: Using only(bottom: 6)
+                    decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 1.0))),
+                    padding: const pw.EdgeInsets.only(bottom: 6),
                     child: pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
                           pw.Column(
                               crossAxisAlignment: pw.CrossAxisAlignment.start,
                               children: [
-                                pw.Text("PURCHASE AUDIT REPORT SYSTEM", style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+                                pw.Text("PURCHASE AUDIT REPORT SYSTEM", style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                                 pw.SizedBox(height: 2),
-                                pw.Text("REAL-TIME PROCUREMENT MONITORING & SUPPLIER LEDGER ENTRIES DIRECTORY", style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+                                pw.Text("REAL-TIME PROCUREMENT MONITORING & SUPPLIER LEDGER ENTRIES DIRECTORY", style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey600)),
                               ]
                           ),
-                          pw.Text("Generated: ${DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600))
+                          pw.Text("Generated: ${DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey600))
                         ]
                     )
                 ),
                 pw.SizedBox(height: 10),
 
-                // Core Data Table Generator Setup
                 ...groupedData.entries.map((entry) {
                   String date = entry.key;
                   List txns = entry.value;
-
                   double totalTaxable = txns.fold(0.0, (sum, i) => sum + parseNum(i['total_taxable']));
                   double totalCgst = txns.fold(0.0, (sum, i) => sum + (_isState(i) ? parseNum(i['cgst']) : 0.0));
                   double totalSgst = txns.fold(0.0, (sum, i) => sum + (_isState(i) ? parseNum(i['sgst']) : 0.0));
                   double totalIgst = txns.fold(0.0, (sum, i) => sum + (!_isState(i) ? parseNum(i['igst']) : 0.0));
                   double subTotal = txns.fold(0.0, (sum, i) => sum + parseNum(i['grand_total']));
 
+                  String formattedDisplayDate = date;
+                  try {
+                    formattedDisplayDate = DateFormat('dd-MM-yyyy').format(DateTime.parse(date));
+                  } catch (_) {}
+
                   return pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(top: 8, bottom: 4),
-                          child: pw.Text(date, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+                          child: pw.Text(formattedDisplayDate, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
                         ),
                         pw.Table(
                             border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+                            // FIXED: Table column widths optimized for Portrait
                             columnWidths: {
-                              0: const pw.FlexColumnWidth(1.8), // Inv / Bill Number Column
-                              1: const pw.FlexColumnWidth(3.2), // Party Corporate Identifier
-                              2: const pw.FlexColumnWidth(1.2), // Taxable Value
-                              3: const pw.FlexColumnWidth(1.0), // Central GST
-                              4: const pw.FlexColumnWidth(1.0), // State GST
-                              5: const pw.FlexColumnWidth(1.0), // Interstate GST
-                              6: const pw.FlexColumnWidth(1.3), // Line Item Total Value
+                              0: const pw.FlexColumnWidth(1.2),
+                              1: const pw.FlexColumnWidth(2.2),
+                              2: const pw.FlexColumnWidth(1.1),
+                              3: const pw.FlexColumnWidth(0.9),
+                              4: const pw.FlexColumnWidth(0.9),
+                              5: const pw.FlexColumnWidth(0.9),
+                              6: const pw.FlexColumnWidth(1.3),
                             },
                             children: [
-                              // Industrial Table Data Layout Header Template
                               pw.TableRow(
                                   decoration: const pw.BoxDecoration(color: PdfColors.grey200),
                                   children: [
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("INV / BILL NO", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("PARTY NAME", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("TAXABLE", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("CGST", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("SGST", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("IGST", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("TOTAL", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("INV / BILL NO", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("PARTY NAME", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("TAXABLE", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("CGST", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("SGST", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("IGST", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("TOTAL", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
                                   ]
                               ),
-
-                              // Transaction Mapping Block Loop Matrix
                               ...txns.map((txn) {
                                 bool localState = _isState(txn);
                                 String billNumber = txn['inv_bill_no']?.toString() ?? txn['inv_no']?.toString() ?? '-';
-
                                 return pw.TableRow(
                                     children: [
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(billNumber, style: const pw.TextStyle(fontSize: 6.5))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(txn['party_name']?.toString().toUpperCase() ?? '', style: const pw.TextStyle(fontSize: 6.5))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(parseNum(txn['total_taxable']).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 6.5))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(localState ? parseNum(txn['cgst']).toStringAsFixed(2) : "0.00", style: const pw.TextStyle(fontSize: 6.5))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(localState ? parseNum(txn['sgst']).toStringAsFixed(2) : "0.00", style: const pw.TextStyle(fontSize: 6.5))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(!localState ? parseNum(txn['igst']).toStringAsFixed(2) : "0.00", style: const pw.TextStyle(fontSize: 6.5))),
-                                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(parseNum(txn['grand_total']).toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(billNumber, style: const pw.TextStyle(fontSize: 5.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(txn['party_name']?.toString().toUpperCase() ?? '', style: const pw.TextStyle(fontSize: 5.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(currencySymbol + parseNum(txn['total_taxable']).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 5.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(localState ? currencySymbol + parseNum(txn['cgst']).toStringAsFixed(2) : "${currencySymbol}0.00", style: const pw.TextStyle(fontSize: 5.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(localState ? currencySymbol + parseNum(txn['sgst']).toStringAsFixed(2) : "${currencySymbol}0.00", style: const pw.TextStyle(fontSize: 5.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(!localState ? currencySymbol + parseNum(txn['igst']).toStringAsFixed(2) : "${currencySymbol}0.00", style: const pw.TextStyle(fontSize: 5.5))),
+                                      pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(currencySymbol + parseNum(txn['grand_total']).toStringAsFixed(2), style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold))),
                                     ]
                                 );
                               }),
-
-                              // Block Subtotal Layout Summary Frame
                               pw.TableRow(
                                   decoration: const pw.BoxDecoration(color: PdfColors.grey50),
                                   children: [
-                                    // 🟢 FIXED: Separated into two simple cells to clean up TableCell/Colspan compiler mismatch
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("", style: const pw.TextStyle(fontSize: 6.5))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("Subtotal:", style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold)))),
-
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalTaxable.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalCgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalSgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalIgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
-                                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(subTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey900))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("")),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("Subtotal:", style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold)))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(currencySymbol + totalTaxable.toStringAsFixed(2), style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(currencySymbol + totalCgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(currencySymbol + totalSgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(currencySymbol + totalIgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold))),
+                                    pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(currencySymbol + subTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold))),
                                   ]
                               )
                             ]
@@ -216,27 +302,26 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
 
                 pw.SizedBox(height: 8),
 
-                // Grand Summary Panel Matrix Anchor
                 pw.Table(
                     border: pw.TableBorder.all(color: PdfColors.black, width: 1),
                     columnWidths: {
-                      0: const pw.FlexColumnWidth(5.0), // Combined size of columns 0 & 1 (1.8 + 3.2)
-                      1: const pw.FlexColumnWidth(1.2),
-                      2: const pw.FlexColumnWidth(1.0),
-                      3: const pw.FlexColumnWidth(1.0),
-                      4: const pw.FlexColumnWidth(1.0),
+                      0: const pw.FlexColumnWidth(3.4),
+                      1: const pw.FlexColumnWidth(1.1),
+                      2: const pw.FlexColumnWidth(0.9),
+                      3: const pw.FlexColumnWidth(0.9),
+                      4: const pw.FlexColumnWidth(0.9),
                       5: const pw.FlexColumnWidth(1.3),
                     },
                     children: [
                       pw.TableRow(
                           decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                           children: [
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("GRAND TOTALS:", style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.black)))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandTaxable.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandCgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandSgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandIgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grandTotalVal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("GRAND TOTALS:", style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold)))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(currencySymbol + grandTaxable.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(currencySymbol + grandCgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(currencySymbol + grandSgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(currencySymbol + grandIgst.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(currencySymbol + grandTotalVal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900))),
                           ]
                       )
                     ]
@@ -249,9 +334,140 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
     await Printing.layoutPdf(
         onLayout: (format) async => pdf.save(),
         name: 'Purchase_Audit_Report_${DateTime.now().millisecondsSinceEpoch}.pdf',
-        format: PdfPageFormat.a4.landscape
+        format: PdfPageFormat.a4 // Fixed to Portrait
     );
   }
+
+
+// 2. SUPPLIER LEDGER STATEMENT - FIXED FOR PORTRAIT & CURRENCY SYMBOL
+  Future<void> _generateSupplierLedgerPdf(Map<String, dynamic> party, List<dynamic> entries) async {
+    final pdf = pw.Document();
+
+    final ttfFont = await PdfGoogleFonts.notoSansRegular();
+    final boldTtfFont = await PdfGoogleFonts.notoSansBold();
+
+    const String currencySymbol = "₹ ";
+
+    double currentBal = parseNum(party['opening_balance']);
+    double totalDr = 0.0;
+    double totalCr = 0.0;
+
+    final List<pw.TableRow> rowsMatrix = [];
+
+    // Header Setup
+    rowsMatrix.add(
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+        children: [
+          pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("DATE", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+          pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("TXN TYPE", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+          pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("REF NO", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+          pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("NARRATION", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold))),
+          pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("DEBIT (DR)", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)))),
+          pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("CREDIT (CR)", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)))),
+          pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text("BALANCE", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)))),
+        ],
+      ),
+    );
+
+    for (var entry in entries) {
+      double dr = parseNum(entry['debit']);
+      double cr = parseNum(entry['credit']);
+      totalDr += dr;
+      totalCr += cr;
+      currentBal = currentBal + cr - dr;
+
+      String dynamicFormattedDate = entry['date'] ?? '';
+      try {
+        dynamicFormattedDate = DateFormat('dd-MM-yyyy').format(DateTime.parse(entry['date']));
+      } catch (_) {}
+
+      rowsMatrix.add(
+        pw.TableRow(
+          children: [
+            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(dynamicFormattedDate, style: const pw.TextStyle(fontSize: 6.5))),
+            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(entry['type'] ?? '', style: const pw.TextStyle(fontSize: 6.5))),
+            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(entry['ref_no'] ?? '', style: const pw.TextStyle(fontSize: 6.5))),
+            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(entry['description']?.toString().toUpperCase() ?? '', style: const pw.TextStyle(fontSize: 6.5))),
+            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text(currencySymbol + (dr > 0 ? dr.toStringAsFixed(2) : '0.00'), style: const pw.TextStyle(fontSize: 6.5)))),
+            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text(currencySymbol + (cr > 0 ? cr.toStringAsFixed(2) : '0.00'), style: const pw.TextStyle(fontSize: 6.5)))),
+            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Container(alignment: pw.Alignment.centerRight, child: pw.Text(currencySymbol + currentBal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold)))),
+          ],
+        ),
+      );
+    }
+
+    pdf.addPage(
+        pw.MultiPage(
+            pageFormat: PdfPageFormat.a4, // FIXED: Landscape hata kar Portrait kiya
+            margin: const pw.EdgeInsets.symmetric(horizontal: 15, vertical: 20),
+            theme: pw.ThemeData.withFont(
+              base: ttfFont,
+              bold: boldTtfFont,
+            ),
+            build: (pw.Context context) {
+              return [
+                pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text("VENDORS LEDGER ACCOUNT STATEMENT", style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                            pw.SizedBox(height: 2),
+                            pw.Text("SUPPLIER: ${party['name']}".toUpperCase(), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                            pw.Text("Vendor ID Reference: ${party['id']}", style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+                          ]
+                      ),
+                      pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.end,
+                          children: [
+                            pw.Text("Generated: ${DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 7)),
+                            pw.Text("Opening Bal: $currencySymbol${parseNum(party['opening_balance']).toStringAsFixed(2)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                          ]
+                      )
+                    ]
+                ),
+                pw.SizedBox(height: 12),
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                  // FIXED: Column widths optimized for Portrait format
+                  columnWidths: {
+                    0: const pw.FlexColumnWidth(1.1),
+                    1: const pw.FlexColumnWidth(1.0),
+                    2: const pw.FlexColumnWidth(1.1),
+                    3: const pw.FlexColumnWidth(2.2),
+                    4: const pw.FlexColumnWidth(1.2),
+                    5: const pw.FlexColumnWidth(1.2),
+                    6: const pw.FlexColumnWidth(1.3),
+                  },
+                  children: rowsMatrix,
+                ),
+                pw.SizedBox(height: 10),
+                pw.Container(
+                    alignment: pw.Alignment.centerRight,
+                    child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text("Total Debit Payments (DR): $currencySymbol${totalDr.toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 7.5)),
+                          pw.Text("Total Purchase Liability (CR): $currencySymbol${totalCr.toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 7.5)),
+                          pw.Divider(color: PdfColors.black, thickness: 0.5),
+                          pw.Text("Final Closing Balance: $currencySymbol${currentBal.toStringAsFixed(2)}", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900)),
+                        ]
+                    )
+                )
+              ];
+            }
+        )
+    );
+
+    await Printing.layoutPdf(
+        onLayout: (format) async => pdf.save(),
+        name: 'Ledger_Statement_${party['id']}.pdf',
+        format: PdfPageFormat.a4 // Fixed to Portrait
+    );
+  }
+
 
   static bool _isState(dynamic txn) {
     final zone = txn['tax_zone']?.toString().toUpperCase() ?? 'STATE';
@@ -278,7 +494,6 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
     for (var txn in filteredAuditList) {
       String dateKey = txn['txn_date']?.toString() ?? 'N/A';
       groupedMap.putIfAbsent(dateKey, () => []).add(txn);
-
       grandTaxable += parseNum(txn['total_taxable']);
       if (_isState(txn)) {
         grandCgst += parseNum(txn['cgst']);
@@ -301,9 +516,9 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("PURCHASE LEDGER AUDIT REPORT",
+              const Text("PURCHASE LEDGER AUDIT SYSTEM",
                   style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: Color(0xFF1E293B), letterSpacing: 0.3)),
-              Text("REAL-TIME PROCUREMENT MONITORING & SUPPLIER LEDGER ENTRIES DIRECTORY",
+              Text(_isSupplierLedgerMode ? "INDIVIDUAL SUPPLIER DETAILED ACCOUNT LEDGER BOOK STATEMENT" : "REAL-TIME PROCUREMENT MONITORING & SUPPLIER LEDGER ENTRIES DIRECTORY",
                   style: TextStyle(color: Colors.grey.shade500, fontSize: 8, fontWeight: FontWeight.bold))
             ],
           ),
@@ -319,35 +534,233 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _toggleNavButton(label: "LEDGER VIEW", active: !_isAuditMode, onTap: () => setState(() => _isAuditMode = false)),
+                    _toggleNavButton(label: "LEDGER VIEW", active: !_isAuditMode && !_isSupplierLedgerMode, onTap: () => setState(() { _isAuditMode = false; _isSupplierLedgerMode = false; })),
                     Container(width: 1, color: Colors.grey.shade300),
-                    _toggleNavButton(label: "AUDIT REPORT", active: _isAuditMode, onTap: () => setState(() => _isAuditMode = true)),
+                    _toggleNavButton(label: "AUDIT REPORT", active: _isAuditMode && !_isSupplierLedgerMode, onTap: () => setState(() { _isAuditMode = true; _isSupplierLedgerMode = false; })),
+                    Container(width: 1, color: Colors.grey.shade300),
+                    _toggleNavButton(label: "VIEW LEDGER WISE", active: _isSupplierLedgerMode, onTap: () => setState(() { _isSupplierLedgerMode = true; _isAuditMode = false; })),
                   ],
                 ),
               ),
             ),
-            if (_isAuditMode)
+            if (_isAuditMode && !_isSupplierLedgerMode)
               IconButton(
                 icon: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFF0F172A), size: 18),
                 tooltip: "Print Landscape Report Layout",
                 onPressed: () => _generateAuditReportPdf(groupedMap, grandTaxable, grandCgst, grandSgst, grandIgst, grandTotalVal),
+              ),
+            if (_isSupplierLedgerMode && _selectedSupplierId != null && _serverPartySummary != null)
+              IconButton(
+                icon: const Icon(Icons.print_outlined, color: Color(0xFFD97706), size: 18),
+                tooltip: "Export Vendor Statement PDF",
+                onPressed: () {
+                  _generateSupplierLedgerPdf(_serverPartySummary!, _serverLedgerEntries);
+                },
               ),
             const SizedBox(width: 16),
           ],
         ),
         body: Column(
           children: [
-            _buildTopStats(isMobile),
-            _buildFilterSection(isMobile),
-            const Divider(height: 1),
+            if (!_isSupplierLedgerMode) _buildTopStats(isMobile),
+            if (!_isSupplierLedgerMode) _buildFilterSection(isMobile),
+            if (!_isSupplierLedgerMode) const Divider(height: 1),
             Expanded(
-              child: _isAuditMode
-                  ? _buildAuditReportList(filteredAuditList, groupedMap, grandTaxable, grandCgst, grandSgst, grandIgst, grandTotalVal)
-                  : _buildTransactionList(isMobile),
+              child: _buildMainContentBody(filteredAuditList, groupedMap, grandTaxable, grandCgst, grandSgst, grandIgst, grandTotalVal, isMobile),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMainContentBody(List filteredAuditList, Map<String, List> groupedMap, double grandTaxable, double grandCgst, double grandSgst, double grandIgst, double grandTotalVal, bool isMobile) {
+    if (_isSupplierLedgerMode) {
+      return _buildSupplierLedgerWiseView();
+    }
+    if (_isAuditMode) {
+      return _buildAuditReportList(filteredAuditList, groupedMap, grandTaxable, grandCgst, grandSgst, grandIgst, grandTotalVal);
+    }
+    return _buildTransactionList(isMobile);
+  }
+
+  Widget _buildSupplierLedgerWiseView() {
+    if (_isSuppliersLoading) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFFD97706)));
+    }
+
+    final List<dynamic> strictlyCreditorsOnly = _suppliersList.where((c) {
+      final String grp = c['group']?.toString().toUpperCase() ?? '';
+      return grp == 'SUNDRY CREDITOR' || grp == 'PURCHASE';
+    }).toList();
+
+    double runningCalcBalance = _serverPartySummary != null ? parseNum(_serverPartySummary!['opening_balance']) : 0.0;
+    double summaryDebitTotal = 0.0;
+    double summaryCreditTotal = 0.0;
+
+    for (var entry in _serverLedgerEntries) {
+      summaryDebitTotal += parseNum(entry['debit']);
+      summaryCreditTotal += parseNum(entry['credit']);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300)),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedSupplierId,
+                hint: const Text("CHOOSE OR SELECT TARGET SUPPLIER PROFILE PROFILE...", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                isExpanded: true,
+                items: strictlyCreditorsOnly.map((sup) {
+                  final String currentId = sup['id']?.toString() ?? '';
+                  return DropdownMenuItem<String>(
+                    value: currentId,
+                    child: Text("${sup['id']} - ${sup['name']}".toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _selectedSupplierId = val;
+                    });
+                    _fetchLedgerWiseStatement(val);
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          if (_selectedSupplierId == null)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.person_search_outlined, size: 36, color: Colors.blueGrey),
+                    SizedBox(height: 8),
+                    Text("Select a supplier to look up account ledger history balances.", style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            )
+          else if (_isLedgerEntriesLoading)
+            const Expanded(child: Center(child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFFD97706))))
+          else ...[
+              Row(
+                children: [
+                  _miniAccountStatTile("OPENING BALANCE", "₹ ${runningCalcBalance.toStringAsFixed(2)}", Colors.blueGrey),
+                  const SizedBox(width: 8),
+                  _miniAccountStatTile("TOTAL PURCHASES (CR)", "₹ ${summaryCreditTotal.toStringAsFixed(2)}", Colors.redAccent),
+                  const SizedBox(width: 8),
+                  _miniAccountStatTile("TOTAL PAYMENTS (DR)", "₹ ${summaryDebitTotal.toStringAsFixed(2)}", Colors.green),
+                  const SizedBox(width: 8),
+                  _miniAccountStatTile("NET PAYABLE CLOSING", "₹ ${(runningCalcBalance + summaryCreditTotal - summaryDebitTotal).toStringAsFixed(2)}", const Color(0xFF0F172A)),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              Expanded(
+                child: Container(
+                  color: Colors.white,
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        color: const Color(0xFFF1F5F9),
+                        child: Row(
+                          children: const [
+                            Expanded(flex: 2, child: Text("DATE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Color(0xFF475569)))),
+                            Expanded(flex: 2, child: Text("TXN TYPE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Color(0xFF475569)))),
+                            Expanded(flex: 2, child: Text("REF / VOUCHER", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Color(0xFF475569)))),
+                            Expanded(flex: 4, child: Text("PARTICULARS / NARRATION", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Color(0xFF475569)))),
+                            Expanded(flex: 2, child: Text("DEBIT (DR) [-]", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.blue))),
+                            Expanded(flex: 2, child: Text("CREDIT (CR) [+]", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.red))),
+                            Expanded(flex: 2, child: Text("BALANCE (₹)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Color(0xFF0F172A)))),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: _serverLedgerEntries.isEmpty
+                            ? const Center(child: Text("No financial ledger logs recorded for selected timeframe parameters.", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)))
+                            : ListView.builder(
+                          itemCount: _serverLedgerEntries.length,
+                          itemBuilder: (context, index) {
+                            final item = _serverLedgerEntries[index];
+                            double dr = parseNum(item['debit']);
+                            double cr = parseNum(item['credit']);
+                            runningCalcBalance = runningCalcBalance + cr - dr;
+
+                            String uiFormattedDisplayDate = item['date'] ?? '';
+                            try {
+                              uiFormattedDisplayDate = DateFormat('dd-MM-yyyy').format(DateTime.parse(item['date']));
+                            } catch (_) {}
+
+                            return Container(
+                              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9)))),
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                              child: Row(
+                                children: [
+                                  Expanded(flex: 2, child: Text(uiFormattedDisplayDate, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500))),
+                                  Expanded(flex: 2, child: _getTxnTypeBadge(item['type'] ?? '')),
+                                  Expanded(flex: 2, child: Text(item['ref_no'] ?? '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueGrey))),
+                                  Expanded(flex: 4, child: Text(item['description'].toString().toUpperCase(), style: TextStyle(fontSize: 9.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600))),
+                                  Expanded(flex: 2, child: Text(dr > 0 ? "₹ ${dr.toStringAsFixed(2)}" : "-", style: const TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.w600))),
+                                  Expanded(flex: 2, child: Text(cr > 0 ? "₹ ${cr.toStringAsFixed(2)}" : "-", style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.w600))),
+                                  Expanded(flex: 2, child: Text("₹ ${runningCalcBalance.toStringAsFixed(2)}", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)))),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            ]
+        ],
+      ),
+    );
+  }
+
+  Widget _miniAccountStatTile(String label, String value, Color textCol) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade200)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: TextStyle(fontSize: 7.5, color: Colors.grey.shade500, fontWeight: FontWeight.w900, letterSpacing: 0.2)),
+            const SizedBox(height: 2),
+            Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: textCol)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _getTxnTypeBadge(String type) {
+    Color col = Colors.grey;
+    if (type == "PURCHASE") col = Colors.red;
+    if (type == "PAYMENT") col = Colors.green;
+    if (type == "JOURNAL") col = Colors.amber.shade900;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          decoration: BoxDecoration(color: col.withOpacity(0.1)),
+          child: Text(type, style: TextStyle(color: col, fontSize: 7.5, fontWeight: FontWeight.w900)),
+        ),
+      ],
     );
   }
 
@@ -398,7 +811,6 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
           padding: const EdgeInsets.only(left: 24.0, right: 24, top: 12.0, bottom: 4.0),
           child: Row(
             children: const [
-              // ALIGNED MATRIX: Shows the actual Invoice/Bill No header text tracking parameter
               Expanded(flex: 2, child: Text("INV / BILL NO", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
               Expanded(flex: 3, child: Text("PARTY NAME", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
               Expanded(child: Text("TAXABLE", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: Color(0xFF475569)))),
@@ -430,7 +842,6 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
                     padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                     child: Row(
                       children: [
-                        // ALIGNED: Matches combined space of INV_NO (2) + PARTY NAME (3) = 5
                         const Expanded(flex: 5, child: Text("GRAND TOTALS:", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF0F172A)))),
                         Expanded(child: Text(grandTaxable.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF0F172A)))),
                         Expanded(child: Text(grandCgst.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF0F172A)))),
@@ -452,28 +863,25 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
               double totalIgst = txns.fold(0.0, (sum, i) => sum + (!_isState(i) ? parseNum(i['igst']) : 0.0));
               double subTotal = txns.fold(0.0, (sum, i) => sum + parseNum(i['grand_total']));
 
+              String auditDisplayDate = date;
+              try {
+                auditDisplayDate = DateFormat('dd-MM-yyyy').format(DateTime.parse(date));
+              } catch (_) {}
+
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6.0),
-                    child: Text(date, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: Color(0xFF0F172A))),
+                    child: Text(auditDisplayDate, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: Color(0xFF0F172A))),
                   ),
                   ...txns.map((txn) {
                     bool localState = _isState(txn);
-                    String billNumber = txn['inv_bill_no']?.toString() ?? txn['inv_no']?.toString() ?? '-';
-
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3.0),
                       child: Row(
                         children: [
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              billNumber,
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
-                            ),
-                          ),
+                          Expanded(flex: 2, child: Text(txn['inv_bill_no']?.toString() ?? '-', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155)))),
                           Expanded(flex: 3, child: Text(txn['party_name']?.toString().toUpperCase() ?? '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155)))),
                           Expanded(child: Text(parseNum(txn['total_taxable']).toStringAsFixed(2), style: const TextStyle(fontSize: 10, color: Color(0xFF334155)))),
                           Expanded(child: Text(localState ? parseNum(txn['cgst']).toStringAsFixed(2) : "0.00", style: const TextStyle(fontSize: 10, color: Color(0xFF334155)))),
@@ -487,16 +895,10 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
                   Padding(
                     padding: const EdgeInsets.only(top: 6.0, bottom: 16.0),
                     child: Container(
-                      decoration: const BoxDecoration(
-                          border: Border(
-                              bottom: BorderSide(color: Color(0xFFE2E8F0)),
-                              top: BorderSide(color: Color(0xFFE2E8F0))
-                          )
-                      ),
+                      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0)), top: BorderSide(color: Color(0xFFE2E8F0)))),
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
                         children: [
-                          // ALIGNED: Spacing block handles matching column layout sizes (2 + 3 = 5)
                           const Expanded(flex: 5, child: SizedBox()),
                           Expanded(child: Text(totalTaxable.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF1E293B)))),
                           Expanded(child: Text(totalCgst.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Color(0xFF1E293B)))),
@@ -515,6 +917,7 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
       ],
     );
   }
+
   Widget _buildTopStats(bool isMobile) {
     return BlocBuilder<LedgerBloc, LedgerState>(
       builder: (context, state) {
@@ -542,11 +945,7 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          border: Border.all(color: Colors.grey.shade200),
-          borderRadius: BorderRadius.zero,
-        ),
+        decoration: BoxDecoration(color: const Color(0xFFF8FAFC), border: Border.all(color: Colors.grey.shade200)),
         child: Row(
           children: [
             CircleAvatar(backgroundColor: color.withOpacity(0.08), radius: 14, child: Icon(icon, color: color, size: 12)),
@@ -667,8 +1066,8 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(color: const Color(0xFF2E4053).withOpacity(0.08), borderRadius: BorderRadius.circular(2)),
-                    child: const Text("PURCHASE VOUCHER", style: TextStyle(color: Color(0xFF2E4053), fontSize: 6.5, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+                    decoration: BoxDecoration(color: const Color(0xFF2E4053).withOpacity(0.08)),
+                    child: const Text("PURCHASE VOUCHER", style: TextStyle(color: Color(0xFF2E4053), fontSize: 6.5, fontWeight: FontWeight.bold)),
                   ),
                   _buildReprintTrigger(item),
                 ],
@@ -687,10 +1086,6 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
                   _metaLabel("DATE", item['invdate'] ?? 'N/A'),
                 ],
               ),
-              if (item['inaddress'] != null && item['inaddress'].toString().trim().isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text("ADDRESS: ${item['inaddress']}".toUpperCase(), style: const TextStyle(fontSize: 7.5, color: Colors.blueGrey, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-              ],
               const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -719,8 +1114,8 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(color: const Color(0xFF2E4053).withOpacity(0.08), borderRadius: BorderRadius.circular(2)),
-                          child: const Text("PURCHASE VOUCHER", style: TextStyle(color: Color(0xFF2E4053), fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
+                          decoration: BoxDecoration(color: const Color(0xFF2E4053).withOpacity(0.08)),
+                          child: const Text("PURCHASE VOUCHER", style: TextStyle(color: Color(0xFF2E4053), fontSize: 7, fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(width: 8),
                         _typeBadge(item['ctype']),
@@ -736,20 +1131,11 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
                         _metaLabel("VOUCHER REF ID", item['invno'] ?? 'N/A'),
                         _bullet(),
                         _metaLabel("BILL DATE", item['invdate'] ?? 'N/A'),
-                        if (item['tranno'] != null) ...[
-                          _bullet(),
-                          _metaLabel("SYSTEM ID", "#${item['tranno']}"),
-                        ]
                       ],
                     ),
-                    if (item['inaddress'] != null && item['inaddress'].toString().trim().isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text("SUPPLIER BILLING ADDRESS: ${item['inaddress']}".toUpperCase(), style: const TextStyle(fontSize: 7.5, color: Colors.blueGrey, fontWeight: FontWeight.w900, letterSpacing: 0.1), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ],
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
               Row(
                 children: [
                   _amountCol("PAID AMOUNT (DR)", "₹${item['trdr']}", const Color(0xFF2563EB)),
@@ -771,7 +1157,7 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(label, style: const TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.2)),
+        Text(label, style: const TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold)),
         Text(val, style: TextStyle(fontWeight: FontWeight.w900, color: color, fontSize: 13)),
       ],
     );
@@ -780,14 +1166,9 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
   Widget _buildReprintTrigger(dynamic item) {
     return InkWell(
       onTap: () => _generatePdf(item),
-      borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.grey.shade300)
-        ),
+        decoration: BoxDecoration(color: const Color(0xFFF1F5F9), border: Border.all(color: Colors.grey.shade300)),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -804,10 +1185,9 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
     return Text(
       "$label: ${value.toUpperCase()}",
       style: TextStyle(
-          fontSize: 8.5,
-          color: highlight ? const Color(0xFFD97706) : (active ? const Color(0xFF0284C7) : Colors.grey.shade600),
-          fontWeight: (active || highlight) ? FontWeight.w900 : FontWeight.bold,
-          letterSpacing: 0.1
+        fontSize: 8.5,
+        color: highlight ? const Color(0xFFD97706) : (active ? const Color(0xFF0284C7) : Colors.grey.shade600),
+        fontWeight: (active || highlight) ? FontWeight.w900 : FontWeight.bold,
       ),
     );
   }
@@ -823,7 +1203,7 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
     bool isTo = type?.toLowerCase() == 'to';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-      decoration: BoxDecoration(color: isTo ? Colors.green.shade50 : Colors.blue.shade50, borderRadius: BorderRadius.circular(2)),
+      decoration: BoxDecoration(color: isTo ? Colors.green.shade50 : Colors.blue.shade50),
       child: Text(type?.toUpperCase() ?? "TO", style: TextStyle(color: isTo ? Colors.green : Colors.blue, fontSize: 7, fontWeight: FontWeight.w900)),
     );
   }
@@ -831,8 +1211,8 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
   Widget _statusBadge(bool live) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-      decoration: BoxDecoration(color: live ? Colors.green.withOpacity(0.06) : Colors.red.withOpacity(0.06), borderRadius: BorderRadius.circular(2)),
-      child: Text(live ? "LIVE" : "VOID", style: TextStyle(color: live ? Colors.green[800] : Colors.red[800], fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 0.2)),
+      decoration: BoxDecoration(color: live ? Colors.green.withOpacity(0.06) : Colors.red.withOpacity(0.06)),
+      child: Text(live ? "LIVE" : "VOID", style: TextStyle(color: live ? Colors.green[800] : Colors.red[800], fontSize: 7, fontWeight: FontWeight.w900)),
     );
   }
 
@@ -846,7 +1226,6 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
                 child: Container(
                   constraints: const BoxConstraints(maxWidth: 420, maxHeight: 520),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
                     child: Theme(
                       data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: Color(0xFF2E4053))),
                       child: DateRangePickerDialog(
@@ -863,16 +1242,21 @@ class _PurchaseLedgerReportPageState extends State<PurchaseLedgerReportPage> {
 
         if (picked != null) {
           setState(() => _dateRange = picked);
-          context.read<LedgerBloc>().add(LoadLedgerData(
-            type: "Purchase",
-            fromDate: DateFormat('yyyy-MM-dd').format(picked.start),
-            toDate: DateFormat('yyyy-MM-dd').format(picked.end),
-          ));
+
+          if (_isSupplierLedgerMode && _selectedSupplierId != null) {
+            _fetchLedgerWiseStatement(_selectedSupplierId!);
+          } else {
+            context.read<LedgerBloc>().add(LoadLedgerData(
+              type: "Purchase",
+              fromDate: DateFormat('yyyy-MM-dd').format(picked.start),
+              toDate: DateFormat('yyyy-MM-dd').format(picked.end),
+            ));
+          }
         }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        decoration: BoxDecoration(color: const Color(0xFF2E4053).withOpacity(0.08), borderRadius: BorderRadius.zero),
+        decoration: BoxDecoration(color: const Color(0xFF2E4053).withOpacity(0.08)),
         child: Row(
           children: [
             const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFF2E4053)),
