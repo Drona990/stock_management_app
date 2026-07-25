@@ -15,6 +15,7 @@ import 'package:stock_management/features/reports/presentation/pages/finalcial_n
 import 'package:stock_management/features/reports/presentation/pages/ledger_transacton_report_screen.dart';
 import 'package:stock_management/features/transaction/presentation/pages/dc_terminal_view.dart';
 import 'package:stock_management/features/transaction/presentation/pages/journal_entry_page.py.dart';
+import 'package:stock_management/features/transaction/presentation/pages/quotation_page.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_dashboard_view.dart';
 import '../../features/main/presentation/pages/bar&resturant/user_management_page.dart';
 import '../../features/masters/presentation/pages/customer_master_screen.dart';
@@ -141,6 +142,8 @@ class AppRouter {
           GoRoute(path: '/manage_session', builder: (context, state) => const SessionManagementPage()),
           GoRoute(path: '/manage_permission', builder: (context, state) => const UserPermissionsScreen()),
           GoRoute(path: '/dc_terminal', builder: (context, state) => const DynamicTerminalScreen()),
+          GoRoute(path: '/quotation_entry', builder: (context, state) => const QuotationTerminalScreen()),
+
         ],
       ),
     ],

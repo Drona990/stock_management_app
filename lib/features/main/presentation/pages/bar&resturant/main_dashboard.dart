@@ -256,6 +256,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               ),
 
               const SizedBox(height: 4),
+              _buildDynamicGroupMenu(
+                icon: Icons.assignment_outlined,
+                label: "Quotation",
+                isCollapsed: isCollapsed,
+                children: [
+                  {"title": "Quotation Entry", "route": "/quotation_entry"},
+                ],
+              ),
+
+              const SizedBox(height: 4),
 
               _buildDynamicGroupMenu(
                 icon: Icons.assignment_outlined,

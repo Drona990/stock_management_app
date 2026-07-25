@@ -188,7 +188,7 @@ import 'package:flutter/material.dart'; // 🌟 Added for UI overlays/SnackBars
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import '../utils/constant/endpoints.dart';
-import '../utils/app_routes.dart'; // 🌟 Ensure this path points to your AppRouter location
+import '../utils/app_routes.dart';
 
 class ApiClient {
   final Dio _dio;

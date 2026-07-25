@@ -4,6 +4,7 @@ import 'package:stock_management/features/transaction/presentation/pages/credit_
 import 'package:stock_management/features/transaction/presentation/pages/dc_terminal_view.dart';
 import 'package:stock_management/features/transaction/presentation/pages/journal_entry_page.py.dart';
 import 'package:stock_management/features/transaction/presentation/pages/purchase_order_transaction_page.dart';
+import 'package:stock_management/features/transaction/presentation/pages/quotation_page.dart';
 import 'package:stock_management/features/transaction/presentation/pages/stock_dashboard_view.dart';
 import 'package:stock_management/features/transaction/presentation/pages/transaction_entry_screen.dart';
 
@@ -18,7 +19,6 @@ Future<void> initTnxInjection(GetIt sl) async {
   sl.registerLazySingleton(() =>  JournalRepository());
   sl.registerFactory(() => JournalBloc(sl<JournalRepository>()));
 
-  // Dependency mappings for unified screen executions
   sl.registerLazySingleton<UnifiedTransactionRepository>(() => UnifiedTransactionRepository());
   sl.registerFactory(() => UnifiedTxBloc(sl<UnifiedTransactionRepository>()));
 
@@ -27,5 +27,8 @@ Future<void> initTnxInjection(GetIt sl) async {
 
   sl.registerLazySingleton(() => PurchaseOrderRepository());
   sl.registerFactory(() => PurchaseOrderBloc(sl<PurchaseOrderRepository>()));
+
+  sl.registerLazySingleton(() => QuotationRepository());
+  sl.registerFactory(() => QuotationBloc(sl<QuotationRepository>()));
 
 }
