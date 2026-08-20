@@ -1,11 +1,11 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io'; // 🌟 Add template for Platform queries
-import 'package:flutter/foundation.dart'; // 🌟 Add template for kIsWeb flag
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:web_socket_channel/io.dart'; // 🌟 Add for dynamic IOWebSocketChannel injections
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../app_routes.dart';
 import '../constant/Endpoints.dart';
@@ -13,7 +13,6 @@ import '../constant/Endpoints.dart';
 class WebSocketService {
   WebSocketChannel? _channel;
 
-  // Central Broadcast Stream for the entire application to listen to real-time events
   final StreamController<Map<String, dynamic>> _centralEventStreamController =
   StreamController<Map<String, dynamic>>.broadcast();
 
@@ -23,11 +22,10 @@ class WebSocketService {
   bool _isConnecting = false;
   String? _cachedAuthToken;
 
-  Stream<Map<String, dynamic>> get centralEventStream => _centralEventStreamController.stream;
+  Stream<Map<String, dynamic>> get centralEventStream =>
+      _centralEventStreamController.stream;
 
-  /// Initializes the Central WebSocket Gateway connection
   void initCentralGateway() async {
-    // If already connected, safely close the existing connection before re-authenticating
     if (isConnected.value) {
       _channel?.sink.close();
       isConnected.value = false;
@@ -38,10 +36,9 @@ class WebSocketService {
 
     _cachedAuthToken = token;
 
+    // Clean base URL properly
     String baseHttpUrl = Endpoints.baseUrl.trim();
-    String connectionUri = "";
 
-    // 🌟 PURE DYNAMIC PROTOCOL DETECTOR ENGINE
     String wsProtocol = "ws://";
     if (baseHttpUrl.startsWith("https://")) {
       wsProtocol = "wss://";
@@ -51,22 +48,30 @@ class WebSocketService {
       baseHttpUrl = baseHttpUrl.replaceFirst("http://", "");
     }
 
-    // 🌟 WINDOWS PORT EXPLICIT FORCE ENGINE: Avoids fallback to default :0 routing
+    // Trailing slash clean up
+    if (baseHttpUrl.endsWith('/')) {
+      baseHttpUrl = baseHttpUrl.substring(0, baseHttpUrl.length - 1);
+    }
+
     if (!kIsWeb && Platform.isWindows) {
-      if (baseHttpUrl.contains("test.ultra.winagrum.tech") && !baseHttpUrl.contains(":443")) {
-        baseHttpUrl = baseHttpUrl.replaceAll("test.ultra.winagrum.tech", "test.ultra.winagrum.tech:443");
-      } else if (baseHttpUrl.contains("winagrum.tech") && !baseHttpUrl.contains(":443")) {
-        baseHttpUrl = baseHttpUrl.replaceAll("winagrum.tech", "winagrum.tech:443");
+      if (baseHttpUrl.contains("test.ultra.winagrum.tech") &&
+          !baseHttpUrl.contains(":443")) {
+        baseHttpUrl = baseHttpUrl.replaceAll(
+            "test.ultra.winagrum.tech", "test.ultra.winagrum.tech:443");
+      } else if (baseHttpUrl.contains("winagrum.tech") &&
+          !baseHttpUrl.contains(":443")) {
+        baseHttpUrl =
+            baseHttpUrl.replaceAll("winagrum.tech", "winagrum.tech:443");
       }
     }
 
-    // Builds the dynamic secure matrix pipeline routing URI
-    connectionUri = "$wsProtocol$baseHttpUrl/ws/live/gateway/?token=$token";
+    // Explicit Clean connection URI
+    String connectionUri =
+        "$wsProtocol$baseHttpUrl/ws/live/gateway/?token=${token.trim()}";
 
     _connect(connectionUri);
   }
 
-  /// Establishes connection to the WebSocket endpoint and handles incoming data streams
   void _connect(String url) {
     if (_isConnecting || _centralEventStreamController.isClosed) return;
     _isConnecting = true;
@@ -74,21 +79,27 @@ class WebSocketService {
     try {
       debugPrint("📡 CONNECTING TO CENTRAL GATEWAY PIPELINE: $url");
 
-      // 🌟 WINDOWS NATIVE SAFE HANDSHAKE ENGINE SWITCH
+      Uri parsedUri = Uri.parse(url);
+
+      // 🌟 WINDOWS NATIVE SAFE HANDSHAKE ENGINE SWITCH WITH ORIGIN HEADER
       if (!kIsWeb && Platform.isWindows) {
+
+        // Dynamic origin format matching scheme (https://domain)
+        String originHeader = "https://${parsedUri.host}";
+
         _channel = IOWebSocketChannel.connect(
-          Uri.parse(url),
+          parsedUri,
           headers: {
-            'Connection': 'Upgrade',
-            'Upgrade': 'websocket',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FlutterDesktopClient',
+            'Origin': originHeader, // 👈 KEY FIX: Added Required Origin Header
+            'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FlutterDesktopClient',
           },
           customClient: HttpClient()
-            ..badCertificateCallback = (X509Certificate cert, String host, int port) => true,
+            ..badCertificateCallback =
+                (X509Certificate cert, String host, int port) => true,
         );
       } else {
-        // Default execution pathway fallback for Android, iOS, and standard Web
-        _channel = WebSocketChannel.connect(Uri.parse(url));
+        _channel = WebSocketChannel.connect(parsedUri);
       }
 
       _channel!.stream.listen(
@@ -101,21 +112,14 @@ class WebSocketService {
             final String eventType = packet['type'] ?? "";
             final dynamic payload = packet['payload'] ?? {};
 
-            // ======================================================================
-            // 🛡️ BRANCH 1: INTERNAL CENTRAL REAL-TIME SECURITY ALERTS MUX
-            // ======================================================================
             if (eventType == "FORCE_LOGOUT") {
               _executeEmergencyKillSwitch(payload);
-              return; // Security pulse breaks flow execution instantly
+              return;
             }
 
-            // ======================================================================
-            // 📦 BRANCH 2: REGULAR DATA STREAMS (ORDERS, INVENTORIES, METRICS)
-            // ======================================================================
             if (!_centralEventStreamController.isClosed) {
               _centralEventStreamController.add(packet);
             }
-
           } catch (e) {
             debugPrint("⚠️ Central Parsing Crash Matrix Exception: $e");
           }
@@ -135,27 +139,30 @@ class WebSocketService {
     }
   }
 
-  /// Triggered by Admin Cluster Event to forcefully log out a breached session
   void _executeEmergencyKillSwitch(dynamic payload) async {
-    debugPrint("🚨 ADMIN TERMINATION EVENT DETECTED: Blowing local authorization tokens.");
+    debugPrint(
+        "🚨 ADMIN TERMINATION EVENT DETECTED: Blowing local authorization tokens.");
 
-    _cachedAuthToken = null; // Kill retry criteria pointer loops
+    _cachedAuthToken = null;
     _channel?.sink.close();
     isConnected.value = false;
 
-    final String currentSessionId = await _storage.read(key: 'session_id') ?? "";
+    final String currentSessionId =
+        await _storage.read(key: 'session_id') ?? "";
     String scope = payload['scope'] ?? "";
     String targetSession = payload['target_session_id'] ?? "";
 
-    if (scope == "GLOBAL_KILL" || (scope == "SINGLE_DEVICE" && targetSession == currentSessionId)) {
-      await _storage.deleteAll(); // Hard clean token stores metadata arrays
+    if (scope == "GLOBAL_KILL" ||
+        (scope == "SINGLE_DEVICE" && targetSession == currentSessionId)) {
+      await _storage.deleteAll();
 
       final context = AppRouter.rootNavigatorKey.currentContext;
       if (context != null && context.mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("🛑 SECURITY ACCOUNT EXPIRED: ${payload['message']}"),
+            content:
+            Text("🛑 SECURITY ACCOUNT EXPIRED: ${payload['message']}"),
             backgroundColor: Colors.red.shade900,
             behavior: SnackBarBehavior.floating,
           ),
@@ -165,18 +172,14 @@ class WebSocketService {
     }
   }
 
-  /// Outbound frame payload dispatcher transmitter
   void sendPayloadEvent(String eventType, Map<String, dynamic> dataPayload) {
     if (_channel != null && isConnected.value) {
-      final outboundFrame = jsonEncode({
-        "type": eventType,
-        "payload": dataPayload
-      });
+      final outboundFrame =
+      jsonEncode({"type": eventType, "payload": dataPayload});
       _channel!.sink.add(outboundFrame);
     }
   }
 
-  /// Handles network failure dropouts and triggers an auto-retry mechanism in 5 seconds
   void _onChannelTeardown() {
     _isConnecting = false;
     isConnected.value = false;
@@ -192,7 +195,6 @@ class WebSocketService {
     }
   }
 
-  /// Gracefully closes the streaming gateway connection manually (e.g., on User Logout)
   void closeGateway() {
     _cachedAuthToken = null;
     _channel?.sink.close();

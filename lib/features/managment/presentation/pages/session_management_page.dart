@@ -38,6 +38,7 @@ class SessionClusterError extends SessionRealtimeState {
   SessionClusterError(this.error);
 }
 
+/*
 class SessionRealtimeBloc extends Bloc<SessionRealtimeEvent, SessionRealtimeState> {
   final ApiClient api;
   WebSocketChannel? _wsChannel;
@@ -158,6 +159,147 @@ class SessionRealtimeBloc extends Bloc<SessionRealtimeEvent, SessionRealtimeStat
       }
     });
 
+  }
+
+  @override
+  Future<void> close() {
+    _wsSubscription?.cancel();
+    _wsChannel?.sink.close();
+    return super.close();
+  }
+}
+*/
+
+
+class SessionRealtimeBloc
+    extends Bloc<SessionRealtimeEvent, SessionRealtimeState> {
+  final ApiClient api;
+  WebSocketChannel? _wsChannel;
+  StreamSubscription? _wsSubscription;
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
+  SessionRealtimeBloc(this.api) : super(SessionClusterLoading()) {
+    on<ConnectRealtimeStream>((event, emit) async {
+      try {
+        await _wsSubscription?.cancel();
+        await _wsChannel?.sink.close();
+
+        final String? token = await _secureStorage.read(key: 'access_token');
+        if (token == null || token.isEmpty) {
+          emit(SessionClusterError(
+              "Authentication token missing. Re-login required."));
+          return;
+        }
+
+        // 🌟 DYNAMIC DOMAIN RESOLUTION
+        String baseHttpUrl = Endpoints.baseUrl.trim();
+
+        if (baseHttpUrl.endsWith('/')) {
+          baseHttpUrl = baseHttpUrl.substring(0, baseHttpUrl.length - 1);
+        }
+
+        String wsUrlString = "";
+
+        if (baseHttpUrl.startsWith("https://")) {
+          final String cleanDomain = baseHttpUrl.replaceFirst("https://", "");
+          wsUrlString = "wss://$cleanDomain/ws/realtime-sessions/?token=${token.trim()}";
+        } else if (baseHttpUrl.startsWith("http://")) {
+          final String cleanIp = baseHttpUrl.replaceFirst("http://", "");
+          wsUrlString = "ws://$cleanIp/ws/realtime-sessions/?token=${token.trim()}";
+        } else {
+          wsUrlString = "wss://$baseHttpUrl/ws/realtime-sessions/?token=${token.trim()}";
+        }
+
+        // 🌟 WINDOWS SECURE PORT EXPLICIT LOCK ENGINE
+        if (!kIsWeb && Platform.isWindows) {
+          if (wsUrlString.contains("test.ultra.winagrum.tech") &&
+              !wsUrlString.contains(":443")) {
+            wsUrlString = wsUrlString.replaceAll(
+                "test.ultra.winagrum.tech", "test.ultra.winagrum.tech:443");
+          } else if (wsUrlString.contains("winagrum.tech") &&
+              !wsUrlString.contains(":443")) {
+            wsUrlString =
+                wsUrlString.replaceAll("winagrum.tech", "winagrum.tech:443");
+          }
+        }
+
+        final wsUrl = Uri.parse(wsUrlString);
+        debugPrint("📡 CONNECTING TO SESSION TELEMETRY SOCKET -> $wsUrlString");
+
+        // 🌟 WINDOWS NATIVE SAFE HANDSHAKE ENGINE
+        if (!kIsWeb && Platform.isWindows) {
+          // Dynamic Origin format (e.g. https://test.ultra.winagrum.tech)
+          final String originHeader = "https://${wsUrl.host}";
+
+          _wsChannel = IOWebSocketChannel.connect(
+            wsUrl,
+            headers: {
+              'Origin': originHeader, // 👈 KEY FIX: Added Required Origin Header
+              'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FlutterDesktopClient',
+            },
+            customClient: HttpClient()
+              ..badCertificateCallback =
+                  (X509Certificate cert, String host, int port) => true,
+          );
+        } else {
+          _wsChannel = WebSocketChannel.connect(wsUrl);
+        }
+
+        _wsSubscription = _wsChannel!.stream.listen((message) {
+          debugPrint("📥 SESSION WS RECEIVED: $message");
+          final decoded = jsonDecode(message);
+
+          final List dynamicData = decoded['data'] ??
+              decoded['payload'] ??
+              decoded['active_sessions'] ??
+              [];
+          add(UpdateMetricsFromStream(dynamicData));
+        }, onError: (err) {
+          debugPrint("🚨 Realtime Session Network Engine Down: $err");
+        }, onDone: () {
+          debugPrint("🔌 WebSocket Session Connection Closed cleanly.");
+        });
+      } catch (e) {
+        emit(SessionClusterError(
+            "WebSocket Realtime Telemetry Cluster unreachable."));
+      }
+    });
+
+    on<UpdateMetricsFromStream>((event, emit) {
+      emit(SessionClusterLiveLoaded(event.dynamicPayload));
+    });
+
+    on<TerminateAllUserSessions>((event, emit) async {
+      try {
+        if (state is SessionClusterLiveLoaded) {
+          final currentList =
+              (state as SessionClusterLiveLoaded).userSessionTelemetry;
+
+          // User ki devices ko runtime par map karke khali (empty) karo
+          final updatedList = currentList.map((user) {
+            if (user['user_id'].toString() == event.userId) {
+              final modifiedUser = Map<String, dynamic>.from(user);
+              modifiedUser['is_online'] = false;
+              modifiedUser['is_active'] = false;
+              modifiedUser['devices'] = [];
+              return modifiedUser;
+            }
+            return user;
+          }).toList();
+
+          emit(SessionClusterLiveLoaded(List.from(updatedList)));
+        }
+
+        await api.post('/api/admin/devices/', data: {
+          "user_id": event.userId,
+          "action": "logout_all_devices"
+        });
+      } catch (e) {
+        debugPrint(
+            "Failed to dispatch global purge sequence command block: $e");
+      }
+    });
   }
 
   @override
