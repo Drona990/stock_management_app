@@ -12,15 +12,39 @@ class SplashPage extends StatefulWidget {
   State<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends State<SplashPage> {
+class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeIn),
+    );
+
+    _animController.forward();
     _startAppFlow();
   }
 
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
   Future<void> _startAppFlow() async {
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(milliseconds: 2400));
     if (!mounted) return;
 
     if (GetIt.I.isRegistered<FlutterSecureStorage>()) {
@@ -42,96 +66,170 @@ class _SplashPageState extends State<SplashPage> {
 
   @override
   Widget build(BuildContext context) {
-    const Color darkBackground = Color(0xFF101218);
-    const Color cyanPrimary = Color(0xFF00BCD4);
-    const Color surfaceGrey = Color(0xFF1A1C24);
+    // Brand Color Palette based on Softwing Logo
+    const Color brandBlue = Color(0xFF0066B3);
+    const Color brandRed = Color(0xFFD32027);
+    const Color darkBackground = Color(0xFF0B0E14);
+    const Color surfaceCard = Color(0xFF141923);
+    const Color textMuted = Color(0xFF8B949E);
 
     return Scaffold(
       backgroundColor: darkBackground,
       body: Stack(
         children: [
-          Positioned.fill(
+          // Dynamic Gradient Aura Background (Blue on Top-Right, Red on Bottom-Left)
+          Positioned(
+            top: -100,
+            right: -100,
             child: Container(
+              width: 320,
+              height: 320,
               decoration: BoxDecoration(
+                shape: BoxShape.circle,
                 gradient: RadialGradient(
-                  center: Alignment.center,
-                  radius: 1.2,
                   colors: [
-                    cyanPrimary.withOpacity(0.05),
-                    darkBackground,
+                    brandBlue.withOpacity(0.18),
+                    Colors.transparent,
                   ],
                 ),
               ),
             ),
           ),
+          Positioned(
+            bottom: -100,
+            left: -100,
+            child: Container(
+              width: 320,
+              height: 320,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    brandRed.withOpacity(0.15),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Central Brand Content
           Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TweenAnimationBuilder(
-                  duration: const Duration(milliseconds: 1000),
-                  curve: Curves.elasticOut,
-                  tween: Tween<double>(begin: 0.5, end: 1.0),
-                  builder: (context, double value, child) {
-                    return Transform.scale(
-                      scale: value,
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: surfaceGrey,
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(color: cyanPrimary.withOpacity(0.5), width: 1),
-                          boxShadow: [
-                            BoxShadow(
-                              color: cyanPrimary.withOpacity(0.2),
-                              blurRadius: 30,
-                              spreadRadius: 2,
-                            ),
-                          ],
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: ScaleTransition(
+                scale: _scaleAnimation,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Glassmorphic Logo Container
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: surfaceCard.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.08),
+                          width: 1.2,
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(15.0),
-                          child: Image.asset(
-                            'assets/icons/logo.png',
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.contain,
+                        boxShadow: [
+                          BoxShadow(
+                            color: brandBlue.withOpacity(0.2),
+                            blurRadius: 35,
+                            offset: const Offset(0, 10),
                           ),
+                          BoxShadow(
+                            color: brandRed.withOpacity(0.1),
+                            blurRadius: 30,
+                            offset: const Offset(-5, -5),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          'assets/icons/logo.png', // Ensure your logo file is placed here
+                          width: 85,
+                          height: 85,
+                          fit: BoxFit.contain,
                         ),
                       ),
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Brand Typography
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Text(
+                          "SOFTWING ",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.5,
+                          ),
+                        ),
+                        Text(
+                          "TECH LABS",
+                          style: TextStyle(
+                            color: brandBlue,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Subtitle / Tagline
+                    const Text(
+                      "ENTERPRISE HR & WORKFORCE PLATFORM",
+                      style: TextStyle(
+                        color: textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.8,
+                      ),
+                    ),
+                    const SizedBox(height: 50),
+
+                    // Dual Accent Line Progress Bar
+                    Container(
+                      width: 48,
+                      height: 3.5,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        gradient: const LinearGradient(
+                          colors: [brandBlue, brandRed],
+                        ),
+                      ),
+                      child: const LinearProgressIndicator(
+                        backgroundColor: Colors.transparent,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white38),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 30),
-                const Text(
-                  "SVENSKA SYSTEMS",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2.0,
-                  ),
+              ),
+            ),
+          ),
+
+          // Bottom Version Branding
+          Positioned(
+            bottom: 24,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Text(
+                "v1.0.0 • Secured Enterprise Portal",
+                style: TextStyle(
+                  color: textMuted.withOpacity(0.6),
+                  fontSize: 11,
+                  letterSpacing: 0.8,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  "POWERING ACCOUNTING INTELLIGENCE",
-                  style: TextStyle(
-                    color: cyanPrimary.withOpacity(0.7),
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 50),
-                const SizedBox(
-                  width: 40,
-                  child: LinearProgressIndicator(
-                    backgroundColor: surfaceGrey,
-                    color: cyanPrimary,
-                    borderRadius: BorderRadius.all(Radius.circular(10)),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],

@@ -1,4 +1,3 @@
-
 import 'dart:typed_data';
 import 'package:dio/dio.dart' as dio;
 import 'package:flutter/material.dart';
@@ -7,10 +6,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../injection.dart';
-import '../../widgets/create_user_dialog.dart';
 
 // =============================================================================
-// 1. BLOC LAYER: UNIFIED USER MANAGEMENT ENGINE (WITH FORCE LOGOUT HOOKS)
+// 1. BLOC LAYER: UNIFIED USER MANAGEMENT ENGINE
 // =============================================================================
 abstract class UserMgmtEvent {}
 class LoadUsers extends UserMgmtEvent {}
@@ -52,7 +50,6 @@ class UserMgmtBloc extends Bloc<UserMgmtEvent, UserMgmtState> {
       emit(UserMgmtLoading());
       try {
         final res = await api.get('/api/users/directory/');
-        print("user directory $res");
         _masterRecords = res.data['data'] ?? [];
         add(FilterUsers());
       } catch (e) {
@@ -103,7 +100,7 @@ class UserMgmtBloc extends Bloc<UserMgmtEvent, UserMgmtState> {
 }
 
 // =============================================================================
-// 2. MAIN VIEW SURFACE: HIGH-DENSITY DIRECTORY CANVAS
+// 2. MAIN DIRECTORY CANVAS (Softwing UI Architecture)
 // =============================================================================
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
@@ -112,9 +109,14 @@ class UserManagementPage extends StatefulWidget {
 }
 
 class _UserManagementPageState extends State<UserManagementPage> {
+  static const Color brandBlue = Color(0xFF0066B3);
+  static const Color brandRed = Color(0xFFD32027);
+  static const Color darkSlate = Color(0xFF0B0E14);
+  static const Color textMuted = Color(0xFF8B949E);
+
   String _selectedRole = "All Roles";
   String _userRoleStr = 'admin';
-  String _currentLoggedInUserId = ''; // 🌟 Tracks central active log session key
+  String _currentLoggedInUserId = '';
 
   @override
   void initState() {
@@ -142,7 +144,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
       create: (context) => UserMgmtBloc(sl<ApiClient>())..add(LoadUsers()),
       child: Builder(builder: (newContext) {
         return Scaffold(
-          backgroundColor: const Color(0xFFF8FAFB),
+          backgroundColor: const Color(0xFFF1F5F9),
           body: Padding(
             padding: EdgeInsets.all(isMobile ? 12.0 : 20.0),
             child: Column(
@@ -166,9 +168,25 @@ class _UserManagementPageState extends State<UserManagementPage> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("FINANCIAL USER DIRECTORY", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
+            const Text(
+              "STAFF & ACCESS DIRECTORY",
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: darkSlate,
+                letterSpacing: 0.5,
+              ),
+            ),
             const SizedBox(height: 2),
-            Text("CURRENT AUTH SCOPE: ${_userRoleStr.toUpperCase()}", style: const TextStyle(color: Color(0xFF00BCD4), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+            Text(
+              "ACTIVE ROLE: ${_userRoleStr.toUpperCase()}",
+              style: const TextStyle(
+                color: brandBlue,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
           ],
         ),
         ElevatedButton.icon(
@@ -179,13 +197,17 @@ class _UserManagementPageState extends State<UserManagementPage> {
               builder: (_) => BlocProvider.value(value: bloc, child: const CreateUserDialog()),
             );
           },
-          icon: const Icon(Icons.person_add_alt_1_outlined, size: 14),
-          label: const Text("ONBOARD ADMINISTRATIVE REGISTRY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+          icon: const Icon(Icons.person_add_alt_1_outlined, size: 15),
+          label: const Text(
+            "ONBOARD NEW STAFF",
+            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+          ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0F172A),
+            backgroundColor: brandBlue,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            elevation: 0,
           ),
         ),
       ],
@@ -194,10 +216,16 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   Widget _buildMainContent(BuildContext context, bool isMobile) {
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.shade200)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
       child: BlocBuilder<UserMgmtBloc, UserMgmtState>(
         builder: (context, state) {
-          if (state is UserMgmtLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFF00BCD4), strokeWidth: 2));
+          if (state is UserMgmtLoading) {
+            return const Center(child: CircularProgressIndicator(color: brandBlue, strokeWidth: 2));
+          }
           if (state is UserMgmtLoaded) {
             return Column(
               children: [
@@ -207,7 +235,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
               ],
             );
           }
-          return const Center(child: Text("Error fetching security directories. Ensure network is active.", style: TextStyle(fontSize: 11)));
+          return const Center(
+            child: Text("Error syncing directory records. Check connection.", style: TextStyle(fontSize: 11)),
+          );
         },
       ),
     );
@@ -215,30 +245,47 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   Widget _buildFilterSection(BuildContext context, bool isMobile) {
     return Padding(
-      padding: const EdgeInsets.all(10.0),
+      padding: const EdgeInsets.all(12.0),
       child: Row(
         children: [
           Expanded(
             child: Container(
-              height: 36,
-              decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade200)),
+              height: 38,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
               child: TextField(
-                style: const TextStyle(fontSize: 11),
+                style: const TextStyle(fontSize: 11.5),
                 onChanged: (v) => context.read<UserMgmtBloc>().add(FilterUsers(query: v)),
-                decoration: const InputDecoration(hintText: "Search by Name, Email or Username...", hintStyle: TextStyle(fontSize: 11), prefixIcon: Icon(Icons.search, size: 14), border: InputBorder.none, contentPadding: EdgeInsets.only(bottom: 12)),
+                decoration: const InputDecoration(
+                  hintText: "Search by Name, Work Email or Username...",
+                  hintStyle: TextStyle(fontSize: 11, color: Colors.grey),
+                  prefixIcon: Icon(Icons.search, size: 15, color: Colors.grey),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.only(bottom: 10),
+                ),
               ),
             ),
           ),
           const SizedBox(width: 10),
           Container(
-            width: 140, height: 36,
+            width: 140,
+            height: 38,
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade300)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _selectedRole,
-                style: const TextStyle(fontSize: 11, color: Colors.black),
-                items: ["All Roles", "Superuser", "Admin"].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                style: const TextStyle(fontSize: 11, color: Colors.black87),
+                items: ["All Roles", "Superuser", "Admin", "Staff"]
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
                 onChanged: (v) {
                   setState(() => _selectedRole = v!);
                   context.read<UserMgmtBloc>().add(FilterUsers(role: v));
@@ -252,7 +299,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Widget _buildResponsiveList(BuildContext context, List users, bool isMobile) {
-    if (users.isEmpty) return const Center(child: Text("Zero operational user mappings matched.", style: TextStyle(fontSize: 11)));
+    if (users.isEmpty) {
+      return const Center(child: Text("No operational staff records matched.", style: TextStyle(fontSize: 11)));
+    }
 
     if (!isMobile) {
       return Column(
@@ -260,14 +309,17 @@ class _UserManagementPageState extends State<UserManagementPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: const Color(0xFFF8FAFC),
-            child: Row(children: [
-              _hCell("IDENTITY ADMINISTRATIVE LAYER", 6), // 🌟 Pure Integer
-              _hCell("SYSTEM USERNAME", 4),                // 🌟 Pure Integer
-              _hCell("TIER ACCESS SCOPE", 3),             // 🌟 Pure Integer
-              _hCell("ACCOUNT STATUS", 3),                // 🌟 Pure Integer
-              _hCell("SECURITY CONTEXT ACTIONS", 4, true)  // 🌟 Pure Integer
-            ]),
-          ),          Expanded(
+            child: Row(
+              children: [
+                _hCell("EMPLOYEE IDENTITY", 6),
+                _hCell("SYSTEM USERNAME", 4),
+                _hCell("PORTAL ROLE", 3),
+                _hCell("STATUS", 3),
+                _hCell("ACTIONS", 4, true),
+              ],
+            ),
+          ),
+          Expanded(
             child: ListView.separated(
               itemCount: users.length,
               separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
@@ -288,20 +340,36 @@ class _UserManagementPageState extends State<UserManagementPage> {
   Widget _buildTableRow(BuildContext context, dynamic user) {
     final bool active = user['is_active'] ?? true;
     final String rowUserId = (user['user_id'] ?? '').toString().trim();
-    // 🌟 Identify whether this row record is the current active logged admin context instance
     final bool isSelf = rowUserId == _currentLoggedInUserId && _currentLoggedInUserId.isNotEmpty;
 
     return Container(
-      color: isSelf ? const Color(0xFFE0F7FA).withOpacity(0.4) : Colors.transparent,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: isSelf ? brandBlue.withOpacity(0.04) : Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          Expanded(flex: 6, child: _userAvatarTitle(user, isSelf)), // 🌟 Clean 6
-          Expanded(flex: 4, child: Text(user['username'] ?? "-", style: TextStyle(fontSize: 11, fontWeight: isSelf ? FontWeight.bold : FontWeight.normal, color: Colors.black87), overflow: TextOverflow.ellipsis)), // 🌟 Clean 4
-          Expanded(flex: 3, child: Text(user['role']?.toString().toUpperCase() ?? "ADMIN", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueGrey))), // 🌟 Clean 3
-          Expanded(flex: 3, child: Align(alignment: Alignment.centerLeft, child: _statusBadge(active))), // 🌟 Clean 3
+          Expanded(flex: 6, child: _userAvatarTitle(user, isSelf)),
           Expanded(
-            flex: 4, // 🌟 Clean 4
+            flex: 4,
+            child: Text(
+              user['username'] ?? "-",
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelf ? FontWeight.bold : FontWeight.normal,
+                color: Colors.black87,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              user['role']?.toString().toUpperCase() ?? "STAFF",
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+            ),
+          ),
+          Expanded(flex: 3, child: Align(alignment: Alignment.centerLeft, child: _statusBadge(active))),
+          Expanded(
+            flex: 4,
             child: _buildProfessionalActionRow(context, user, active, isSelf),
           ),
         ],
@@ -317,10 +385,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 10),
-      color: isSelf ? const Color(0xFFE0F7FA).withOpacity(0.3) : Colors.white,
+      color: isSelf ? brandBlue.withOpacity(0.03) : Colors.white,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-          side: BorderSide(color: isSelf ? const Color(0xFF00BCD4).withOpacity(0.4) : Colors.grey.shade200, width: isSelf ? 1.5 : 1)
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isSelf ? brandBlue.withOpacity(0.4) : Colors.grey.shade200,
+          width: isSelf ? 1.5 : 1,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -332,40 +403,65 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 _statusBadge(active),
               ],
             ),
-            const Divider(height: 20),
+            const Divider(height: 18),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _mobileInfoItem("USERNAME", user['username'] ?? "-"),
-                _mobileInfoItem("ACCESS SCOPE", user['role']?.toString().toUpperCase() ?? "ADMIN"),
+                _mobileInfoItem("PORTAL ROLE", user['role']?.toString().toUpperCase() ?? "STAFF"),
               ],
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(child: OutlinedButton.icon(onPressed: () => _showEditDialog(context, user), icon: const Icon(Icons.edit, size: 14), label: const Text("Modify Specifications", style: TextStyle(fontSize: 10)))),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showEditDialog(context, user),
+                    icon: const Icon(Icons.edit, size: 13),
+                    label: const Text("Edit", style: TextStyle(fontSize: 10)),
+                  ),
+                ),
                 const SizedBox(width: 8),
                 if (!isSelf) ...[
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => _showForceLogoutPrompt(context, user),
                       icon: const Icon(Icons.gpp_bad_outlined, size: 12, color: Colors.white),
-                      label: const Text("Force Out", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, elevation: 0, padding: EdgeInsets.zero),
+                      label: const Text("Force Out", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: brandRed,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: EdgeInsets.zero,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => _showStatusPrompt(context, user),
-                      style: ElevatedButton.styleFrom(backgroundColor: active ? Colors.red.shade50 : Colors.green.shade50, elevation: 0, padding: EdgeInsets.zero),
-                      child: Text(active ? "Deactivate" : "Activate", style: TextStyle(color: active ? Colors.red : Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: active ? Colors.red.shade50 : Colors.green.shade50,
+                        elevation: 0,
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: Text(
+                        active ? "Deactivate" : "Activate",
+                        style: TextStyle(
+                          color: active ? brandRed : Colors.green.shade700,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ] else ...[
                   const Expanded(
                     child: Center(
-                      child: Text("ACTIVE SESSION (YOU)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF00BCD4), letterSpacing: 0.3)),
+                      child: Text(
+                        "CURRENT SESSION",
+                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: brandBlue, letterSpacing: 0.4),
+                      ),
                     ),
                   )
                 ]
@@ -377,44 +473,35 @@ class _UserManagementPageState extends State<UserManagementPage> {
     );
   }
 
-  // =============================================================================
-  // 💎 HIGH-DENSITY HIGH-DEFINITION ERP ACTION BUTTONS CELL
-  // =============================================================================
   Widget _buildProfessionalActionRow(BuildContext context, dynamic user, bool active, bool isSelf) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 1. Edit Action
         _actionContainerButton(
-          tooltip: "Edit Account Specs",
+          tooltip: "Edit Profile Specs",
           icon: Icons.edit_outlined,
           iconColor: Colors.blueGrey.shade700,
           bgColor: Colors.blueGrey.shade50,
           onPressed: () => _showEditDialog(context, user),
         ),
         const SizedBox(width: 8),
-
-        // Self Protection Shield Layers
         if (!isSelf) ...[
-          // 2. Realtime Force Session Revoke
           _actionContainerButton(
-            tooltip: "Force Terminate Multi-Devices Real-Time",
+            tooltip: "Force Terminate Active Sessions",
             icon: Icons.gpp_bad_rounded,
-            iconColor: Colors.red.shade700,
-            bgColor: Colors.red.shade50,
+            iconColor: brandRed,
+            bgColor: brandRed.withOpacity(0.08),
             onPressed: () => _showForceLogoutPrompt(context, user),
           ),
-          const SizedBox(width: 10),
-
-          // 3. Status Matrix Switch
+          const SizedBox(width: 8),
           SizedBox(
             height: 24,
             child: Tooltip(
-              message: active ? "Deactivate Master Registry" : "Activate Master Registry",
+              message: active ? "Deactivate User" : "Activate User",
               child: Switch(
                 value: active,
-                activeColor: const Color(0xFF00BCD4),
+                activeColor: brandBlue,
                 inactiveThumbColor: Colors.grey.shade400,
                 inactiveTrackColor: Colors.grey.shade200,
                 onChanged: (v) => _showStatusPrompt(context, user),
@@ -422,11 +509,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
             ),
           ),
         ] else ...[
-          // Safe lock banner context loops
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: const Color(0xFF00BCD4).withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
-            child: const Text("CURRENT SELF", style: TextStyle(color: Color(0xFF00BCD4), fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(color: brandBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+            child: const Text("YOU", style: TextStyle(color: brandBlue, fontSize: 8.5, fontWeight: FontWeight.w900)),
           )
         ]
       ],
@@ -460,10 +546,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
       mainAxisSize: MainAxisSize.min,
       children: [
         CircleAvatar(
-          radius: 14,
-          backgroundColor: isSelf ? const Color(0xFF00BCD4) : const Color(0xFF0F4C81),
+          radius: 15,
+          backgroundColor: isSelf ? brandBlue : darkSlate,
           backgroundImage: profileUrl != null ? NetworkImage(profileUrl) : null,
-          child: profileUrl == null ? Text(user['name']?[0] ?? "U", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)) : null,
+          child: profileUrl == null
+              ? Text(
+            user['name']?[0] ?? "U",
+            style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+          )
+              : null,
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -475,15 +566,23 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Flexible(
-                    child: Text(user['name'] ?? "Unknown", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF1E293B)), overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      user['name'] ?? "Unknown",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: darkSlate),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   if (isSelf) ...[
                     const SizedBox(width: 4),
-                    const Icon(Icons.stars, color: Color(0xFF00BCD4), size: 11) // Visual crown bookmark indicator
+                    const Icon(Icons.verified, color: brandBlue, size: 12)
                   ]
                 ],
               ),
-              Text(user['email'] ?? "", style: const TextStyle(fontSize: 9, color: Colors.grey), overflow: TextOverflow.ellipsis),
+              Text(
+                user['email'] ?? "",
+                style: const TextStyle(fontSize: 9, color: Colors.grey),
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         )
@@ -495,47 +594,73 @@ class _UserManagementPageState extends State<UserManagementPage> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(l, style: const TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold)),
-      Text(v, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+      Text(v, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: darkSlate)),
     ],
   );
 
   Widget _statusBadge(bool active) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: active ? Colors.green.shade50 : Colors.red.shade50, borderRadius: BorderRadius.circular(4)),
-      child: Text(active ? "ACTIVE" : "TERMINATED", style: TextStyle(color: active ? Colors.green : Colors.red, fontSize: 8, fontWeight: FontWeight.bold))
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    decoration: BoxDecoration(
+      color: active ? Colors.green.shade50 : brandRed.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(
+      active ? "ACTIVE" : "INACTIVE",
+      style: TextStyle(
+        color: active ? Colors.green.shade700 : brandRed,
+        fontSize: 8,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
   );
 
-  Widget _hCell(String t, int f, [bool r = false]) => Expanded(flex: f, child: Text(t, textAlign: r ? TextAlign.right : TextAlign.left, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.grey)));
+  Widget _hCell(String t, int f, [bool r = false]) => Expanded(
+    flex: f,
+    child: Text(
+      t,
+      textAlign: r ? TextAlign.right : TextAlign.left,
+      style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+    ),
+  );
 
   Future<void> _showForceLogoutPrompt(BuildContext context, dynamic user) async {
     final bloc = context.read<UserMgmtBloc>();
-    final String targetName = user['name'] ?? "This Admin";
+    final String targetName = user['name'] ?? "This User";
     final String targetUserId = user['user_id'].toString();
 
     return showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: brandRed, size: 20),
             SizedBox(width: 8),
-            Text("CRITICAL: Force Session Terminate", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+            Text(
+              "Force Session Termination",
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: brandRed),
+            ),
           ],
         ),
-        content: Text("Are you absolutely sure you want to forcibly expire all tokens and logout $targetName on all mobile/desktop/web instances immediately?", style: const TextStyle(fontSize: 12)),
+        content: Text(
+          "Forcibly terminate active tokens and log out $targetName across all devices?",
+          style: const TextStyle(fontSize: 12),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("CANCEL", style: TextStyle(fontSize: 11, color: Colors.grey))),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("CANCEL", style: TextStyle(fontSize: 11, color: Colors.grey)),
+          ),
           ElevatedButton(
             onPressed: () {
               bloc.add(ForceLogoutUserSessions(userId: targetUserId, userName: targetName));
               Navigator.pop(dialogContext);
               ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("⚡ Force Logout Sent Command Matrix for $targetName"), backgroundColor: Colors.orange.shade800)
+                SnackBar(content: Text("Force Logout dispatched for $targetName"), backgroundColor: brandRed),
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text("TERMINATE ALL SESSIONS", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: brandRed, foregroundColor: Colors.white),
+            child: const Text("TERMINATE SESSIONS", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -545,24 +670,27 @@ class _UserManagementPageState extends State<UserManagementPage> {
   Future<void> _showStatusPrompt(BuildContext context, dynamic user) async {
     final bool isActive = user['is_active'] ?? true;
     final String actionText = isActive ? "Deactivate" : "Activate";
-    final Color actionColor = isActive ? Colors.redAccent : const Color(0xFF00BCD4);
+    final Color actionColor = isActive ? brandRed : brandBlue;
     final bloc = context.read<UserMgmtBloc>();
 
     return showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        title: Text("Confirm Master $actionText", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-        content: Text("Are you completely verified to change state matrices for: ${user['name']}?", style: const TextStyle(fontSize: 12)),
+        title: Text("Confirm $actionText", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        content: Text("Change operational status for ${user['name']}?", style: const TextStyle(fontSize: 12)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("CANCEL", style: TextStyle(fontSize: 11))),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("CANCEL", style: TextStyle(fontSize: 11)),
+          ),
           ElevatedButton(
             onPressed: () {
               bloc.add(ToggleUserStatus(user['user_id'], isActive));
               Navigator.pop(dialogContext);
             },
             style: ElevatedButton.styleFrom(backgroundColor: actionColor, foregroundColor: Colors.white),
-            child: Text("YES, EXECUTE", style: const TextStyle(fontSize: 11)),
+            child: Text("EXECUTE", style: const TextStyle(fontSize: 11)),
           ),
         ],
       ),
@@ -576,7 +704,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
 }
 
 // =============================================================================
-// 🛡️ ONBOARDING MODAL COMPONENT: CREATE DIALOG (MULTIPART & WEB SAFE)
+// 🛡️ ONBOARDING MODAL COMPONENT (Softwing Brand Styling)
 // =============================================================================
 class CreateUserDialog extends StatefulWidget {
   const CreateUserDialog({super.key});
@@ -585,6 +713,10 @@ class CreateUserDialog extends StatefulWidget {
 }
 
 class _CreateUserDialogState extends State<CreateUserDialog> {
+  static const Color brandBlue = Color(0xFF0066B3);
+  static const Color brandRed = Color(0xFFD32027);
+  static const Color darkSlate = Color(0xFF0B0E14);
+
   final _formKey = GlobalKey<FormState>();
 
   final _firstNameController = TextEditingController();
@@ -644,10 +776,14 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
       await sl<ApiClient>().post('/api/admin/create/', data: formData);
 
       navigator.pop();
-      messenger.showSnackBar(const SnackBar(content: Text("✅ Administrator Onboarded Successfully!"), backgroundColor: Colors.green));
+      messenger.showSnackBar(
+        const SnackBar(content: Text("✅ Staff Member Onboarded Successfully!"), backgroundColor: Colors.green),
+      );
       bloc.add(LoadUsers());
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text("❌ Creation Fault: ${e.toString()}"), backgroundColor: Colors.red));
+      messenger.showSnackBar(
+        SnackBar(content: Text("❌ Creation Fault: ${e.toString()}"), backgroundColor: brandRed),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -656,10 +792,10 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: Container(
         width: 480,
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -667,8 +803,11 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Onboard Account Registry", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
-                const SizedBox(height: 16),
+                const Text(
+                  "Onboard New Staff Member",
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: darkSlate),
+                ),
+                const SizedBox(height: 18),
 
                 Center(
                   child: Stack(
@@ -677,13 +816,27 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                         radius: 36,
                         backgroundColor: const Color(0xFFF1F5F9),
                         backgroundImage: _imageBytesMemory != null ? MemoryImage(_imageBytesMemory!) : null,
-                        child: _imageBytesMemory == null ? const Icon(Icons.add_a_photo_outlined, size: 20, color: Colors.blueGrey) : null,
+                        child: _imageBytesMemory == null
+                            ? const Icon(Icons.add_a_photo_outlined, size: 20, color: Colors.blueGrey)
+                            : null,
                       ),
-                      Positioned(bottom: 0, right: 0, child: CircleAvatar(radius: 11, backgroundColor: const Color(0xFF0F4C81), child: IconButton(padding: EdgeInsets.zero, icon: const Icon(Icons.edit, size: 10, color: Colors.white), onPressed: _pickImage))),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: CircleAvatar(
+                          radius: 12,
+                          backgroundColor: brandBlue,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.edit, size: 12, color: Colors.white),
+                            onPressed: _pickImage,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
 
                 Row(
                   children: [
@@ -698,7 +851,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                   children: [
                     Expanded(child: _buildInput(_phoneController, "PHONE NUMBER", Icons.phone_android_outlined)),
                     const SizedBox(width: 10),
-                    Expanded(child: _buildInput(_ageController, "AGE SPECS", Icons.calendar_month_outlined)),
+                    Expanded(child: _buildInput(_ageController, "AGE", Icons.calendar_month_outlined)),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -708,9 +861,12 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: _selectedGender,
-                        style: const TextStyle(fontSize: 11, color: Colors.black),
+                        style: const TextStyle(fontSize: 11, color: Colors.black87),
                         decoration: _inputStyle("GENDER", Icons.transgender_outlined),
-                        items: const [DropdownMenuItem(value: "MALE", child: Text("Male")), DropdownMenuItem(value: "FEMALE", child: Text("Female"))],
+                        items: const [
+                          DropdownMenuItem(value: "MALE", child: Text("Male")),
+                          DropdownMenuItem(value: "FEMALE", child: Text("Female")),
+                        ],
                         onChanged: (v) => setState(() => _selectedGender = v!),
                       ),
                     ),
@@ -718,9 +874,12 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: _selectedRole,
-                        style: const TextStyle(fontSize: 11, color: Colors.black),
-                        decoration: _inputStyle("ROLE MATRIX", Icons.admin_panel_settings_outlined),
-                        items: const [DropdownMenuItem(value: "admin", child: Text("Admin / Manager")), DropdownMenuItem(value: "superuser", child: Text("Superuser System"))],
+                        style: const TextStyle(fontSize: 11, color: Colors.black87),
+                        decoration: _inputStyle("PORTAL ROLE", Icons.admin_panel_settings_outlined),
+                        items: const [
+                          DropdownMenuItem(value: "admin", child: Text("Admin / Manager")),
+                          DropdownMenuItem(value: "superuser", child: Text("Superuser")),
+                        ],
                         onChanged: (v) => setState(() => _selectedRole = v!),
                       ),
                     ),
@@ -728,20 +887,30 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                _buildInput(_emailController, "IDENTIFIER EMAIL ADDRESS", Icons.email_outlined),
+                _buildInput(_emailController, "OFFICIAL WORK EMAIL", Icons.email_outlined),
                 const SizedBox(height: 12),
-                _buildInput(_passwordController, "SECURITY ACCESS KEY CODE", Icons.lock_outline, isPass: true),
-                const SizedBox(height: 20),
+                _buildInput(_passwordController, "ACCOUNT ACCESS PASSWORD", Icons.lock_outline, isPass: true),
+                const SizedBox(height: 22),
 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL", style: TextStyle(fontSize: 11))),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("CANCEL", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    ),
                     const SizedBox(width: 10),
                     ElevatedButton(
                       onPressed: _isLoading ? null : _submitData,
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
-                      child: _isLoading ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 1.5)) : const Text("INITIALIZE SYSTEM ACCESS", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: brandBlue,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        elevation: 0,
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 1.5))
+                          : const Text("ONBOARD EMPLOYEE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 )
@@ -757,7 +926,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
     return TextFormField(
       controller: ctrl,
       obscureText: isPass,
-      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500),
       decoration: _inputStyle(lbl, icon),
       validator: (v) => (v == null || v.trim().isEmpty) ? "Required" : null,
     );
@@ -765,9 +934,13 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
 
   InputDecoration _inputStyle(String lbl, IconData icon) => InputDecoration(
     labelText: lbl,
-    labelStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey),
-    prefixIcon: Icon(icon, size: 14, color: const Color(0xFF00BCD4)),
-    border: const OutlineInputBorder(),
+    labelStyle: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.grey),
+    prefixIcon: Icon(icon, size: 15, color: brandBlue),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(6),
+      borderSide: const BorderSide(color: brandBlue, width: 1.5),
+    ),
     contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
     isDense: true,
   );
@@ -777,5 +950,5 @@ class EditUserDialog extends StatelessWidget {
   final dynamic user;
   const EditUserDialog({super.key, required this.user});
   @override
-  Widget build(BuildContext context) => const AlertDialog(title: Text("Edit View Placeholder"));
+  Widget build(BuildContext context) => const AlertDialog(title: Text("Edit User Placeholder"));
 }

@@ -57,10 +57,11 @@ class UserPermissionMatrixEntity {
     required this.allowedRoutes,
   });
 
-  factory UserPermissionMatrixEntity.fromJson(Map<String, dynamic> json) => UserPermissionMatrixEntity(
-    userId: (json['user_id'] ?? "").toString(),
-    allowedRoutes: List<String>.from(json['allowed_routes'] ?? []),
-  );
+  factory UserPermissionMatrixEntity.fromJson(Map<String, dynamic> json) =>
+      UserPermissionMatrixEntity(
+        userId: (json['user_id'] ?? "").toString(),
+        allowedRoutes: List<String>.from(json['allowed_routes'] ?? []),
+      );
 
   Map<String, dynamic> toJson() => {
     "user_id": userId,
@@ -120,7 +121,7 @@ class UserPermissionsRepository {
 }
 
 // ==========================================================================
-// 3. BLOC EVENTS, STATES & LOGIC LAYER
+// 3. BLOC LAYER
 // ==========================================================================
 abstract class UserPermissionsEvent {}
 
@@ -289,17 +290,25 @@ class UserPermissionsBloc extends Bloc<UserPermissionsEvent, UserPermissionsStat
 }
 
 // ==========================================================================
-// 4. MAIN VIEW SURFACE: HIGH-DENSITY ERP CANVAS (CUSTOM CARDS)
+// 4. MAIN PERMISSIONS CANVAS (Softwing Tech Labs Theme)
 // ==========================================================================
 class UserPermissionsScreen extends StatelessWidget {
   const UserPermissionsScreen({super.key});
 
+  static const Color brandBlue = Color(0xFF0066B3);
+  static const Color brandRed = Color(0xFFD32027);
+  static const Color darkSlate = Color(0xFF0B0E14);
+  static const Color surfaceCard = Color(0xFF141923);
+  static const Color textMuted = Color(0xFF8B949E);
+
   void _showSnackbar(BuildContext context, String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+        content: Text(msg, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     );
   }
@@ -311,9 +320,9 @@ class UserPermissionsScreen extends StatelessWidget {
       child: BlocListener<UserPermissionsBloc, UserPermissionsState>(
         listener: (context, state) {
           if (state is UserPermissionsSavedSuccess) {
-            _showSnackbar(context, "Permissions committed for: ${state.username}", Colors.green);
+            _showSnackbar(context, "Permissions committed for: ${state.username}", const Color(0xFF0D9488));
           } else if (state is UserPermissionsError) {
-            _showSnackbar(context, state.message, Colors.redAccent);
+            _showSnackbar(context, state.message, brandRed);
           }
         },
         child: Builder(
@@ -321,34 +330,28 @@ class UserPermissionsScreen extends StatelessWidget {
             final bloc = newContext.read<UserPermissionsBloc>();
 
             return Scaffold(
-              backgroundColor: const Color(0xFFF8FAFC),
+              backgroundColor: const Color(0xFFF1F5F9),
               body: Column(
                 children: [
-                  // ➡️ TOP ACTION BAR
                   _buildTopActionBar(bloc),
-
-                  // ➡️ MAIN CANVAS
                   Expanded(
                     child: BlocBuilder<UserPermissionsBloc, UserPermissionsState>(
                       builder: (context, state) {
                         if (state is UserPermissionsLoading) {
                           return const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F172A)),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: brandBlue),
                           );
                         }
 
                         if (state is UserPermissionsLoaded) {
                           return SingleChildScrollView(
                             physics: const ClampingScrollPhysics(),
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(18),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Target User Header Card
                                 _buildUserSelectorHeader(state, bloc),
-                                const SizedBox(height: 16),
-
-                                // Custom Group Cards Container
+                                const SizedBox(height: 18),
                                 _buildPermissionsMatrixCards(state, bloc),
                               ],
                             ),
@@ -356,7 +359,10 @@ class UserPermissionsScreen extends StatelessWidget {
                         }
 
                         return const Center(
-                          child: Text("Registry Load Error", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                          child: Text(
+                            "Failed to load permission registries.",
+                            style: TextStyle(color: brandRed, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
                         );
                       },
                     ),
@@ -372,7 +378,7 @@ class UserPermissionsScreen extends StatelessWidget {
 
   Widget _buildTopActionBar(UserPermissionsBloc bloc) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
@@ -382,11 +388,16 @@ class UserPermissionsScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(width: 4, height: 16, color: const Color(0xFF00BCD4)),
-              const SizedBox(width: 8),
+              Container(width: 4, height: 18, color: brandBlue),
+              const SizedBox(width: 10),
               const Text(
                 "USER NAVIGATION ACCESS MATRIX",
-                style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF0F172A), fontSize: 13, letterSpacing: 0.5),
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: darkSlate,
+                  fontSize: 13,
+                  letterSpacing: 0.6,
+                ),
               ),
             ],
           ),
@@ -397,18 +408,22 @@ class UserPermissionsScreen extends StatelessWidget {
               return ElevatedButton.icon(
                 onPressed: isSaving ? null : () => bloc.add(SavePermissionsEvent()),
                 icon: isSaving
-                    ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white))
-                    : const Icon(Icons.security_rounded, size: 14),
+                    ? const SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                )
+                    : const Icon(Icons.shield_outlined, size: 15),
                 label: Text(
-                  (isSaving ? "SAVING..." : "SAVE PERMISSIONS").toUpperCase(),
-                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                  isSaving ? "SAVING..." : "SAVE PERMISSIONS",
+                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
+                  backgroundColor: brandBlue,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 ),
               );
             },
@@ -421,14 +436,15 @@ class UserPermissionsScreen extends StatelessWidget {
   Widget _buildUserSelectorHeader(UserPermissionsLoaded state, UserPermissionsBloc bloc) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(8),
+        color: surfaceCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white10),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
-            blurRadius: 6,
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
@@ -446,43 +462,52 @@ class UserPermissionsScreen extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 20,
-                    backgroundColor: const Color(0xFF00BCD4),
+                    backgroundColor: brandBlue,
                     child: Text(
-                      state.selectedUser.username.isNotEmpty ? state.selectedUser.username[0].toUpperCase() : "U",
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      state.selectedUser.username.isNotEmpty
+                          ? state.selectedUser.username[0].toUpperCase()
+                          : "U",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         "TARGET USER: ${state.selectedUser.username.toUpperCase()}",
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.3),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13.5,
+                          letterSpacing: 0.4,
+                        ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 3),
                       Text(
-                        "ROLE: ${state.selectedUser.role.toUpperCase()}  |  ALLOWED ROUTES: ${state.allowedRoutes.length}",
-                        style: const TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.w600),
+                        "ROLE: ${state.selectedUser.role.toUpperCase()}   •   ACTIVE ROUTES: ${state.allowedRoutes.length}",
+                        style: const TextStyle(
+                          color: Color(0xFF60A5FA),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
                 ],
               ),
-              if (!isWide) const SizedBox(height: 12),
-
-              // Dropdown to Choose Target User
+              if (!isWide) const SizedBox(height: 14),
               Container(
                 height: 38,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: darkSlate,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.grey.shade400),
+                  border: Border.all(color: Colors.white12),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    dropdownColor: Colors.white,
+                    dropdownColor: surfaceCard,
                     isDense: true,
                     value: state.selectedUser.id,
                     items: state.users.map((u) {
@@ -490,7 +515,11 @@ class UserPermissionsScreen extends StatelessWidget {
                         value: u.id,
                         child: Text(
                           "${u.username.toUpperCase()} (${u.role.toUpperCase()})",
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                       );
                     }).toList(),
@@ -541,11 +570,11 @@ class UserPermissionsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Custom Group Header
+              // Group Header
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: const BoxDecoration(
-                  color: Color(0xFFF1F5F9),
+                  color: Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(8),
                     topRight: Radius.circular(8),
@@ -556,11 +585,16 @@ class UserPermissionsScreen extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.folder_outlined, size: 16, color: Color(0xFF00BCD4)),
+                        const Icon(Icons.folder_outlined, size: 16, color: brandBlue),
                         const SizedBox(width: 8),
                         Text(
                           groupName.toUpperCase(),
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF00BCD4), letterSpacing: 0.5),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: darkSlate,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ],
                     ),
@@ -570,15 +604,15 @@ class UserPermissionsScreen extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isAllGroupAllowed ? Colors.redAccent.withOpacity(0.1) : const Color(0xFF0F172A).withOpacity(0.08),
+                          color: isAllGroupAllowed ? brandRed.withOpacity(0.08) : brandBlue.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          isAllGroupAllowed ? "DESELECT ALL" : "SELECT GROUP",
+                          isAllGroupAllowed ? "DESELECT ALL" : "SELECT ALL",
                           style: TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
-                            color: isAllGroupAllowed ? Colors.redAccent : const Color(0xFF0F172A),
+                            color: isAllGroupAllowed ? brandRed : brandBlue,
                           ),
                         ),
                       ),
@@ -587,7 +621,7 @@ class UserPermissionsScreen extends StatelessWidget {
                 ),
               ),
 
-              // Custom Container / Row Based Items List (NO ListTile)
+              // Route Items List
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
@@ -599,25 +633,24 @@ class UserPermissionsScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 150),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        margin: const EdgeInsets.symmetric(vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                         decoration: BoxDecoration(
-                          color: isChecked ? const Color(0xFF00BCD4).withOpacity(0.04) : Colors.transparent,
+                          color: isChecked ? brandBlue.withOpacity(0.03) : Colors.transparent,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: isChecked ? const Color(0xFF00BCD4).withOpacity(0.3) : Colors.grey.shade200,
+                            color: isChecked ? brandBlue.withOpacity(0.25) : Colors.grey.shade200,
                             width: 1,
                           ),
                         ),
                         child: Row(
                           children: [
-                            // Custom Square Checkbox
                             SizedBox(
                               width: 20,
                               height: 20,
                               child: Checkbox(
                                 value: isChecked,
-                                activeColor: const Color(0xFF00BCD4),
+                                activeColor: brandBlue,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                                 onChanged: (bool? val) {
                                   if (val != null) {
@@ -627,8 +660,6 @@ class UserPermissionsScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 12),
-
-                            // Custom Column Text Block
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -638,7 +669,7 @@ class UserPermissionsScreen extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: isChecked ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                                      color: isChecked ? darkSlate : const Color(0xFF64748B),
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -649,8 +680,6 @@ class UserPermissionsScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
-
-                            // Custom Rounded Badge (ALLOWED / RESTRICTED)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
@@ -662,7 +691,7 @@ class UserPermissionsScreen extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 8.5,
                                   fontWeight: FontWeight.bold,
-                                  color: isChecked ? Colors.green : Colors.grey.shade600,
+                                  color: isChecked ? Colors.green.shade700 : Colors.grey.shade600,
                                 ),
                               ),
                             ),

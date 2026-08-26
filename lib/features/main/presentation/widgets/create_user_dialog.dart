@@ -7,19 +7,29 @@ import '../pages/bar&resturant/user_management_page.dart';
 class EditUserDialog extends StatefulWidget {
   final dynamic user;
   const EditUserDialog({super.key, required this.user});
+
   @override
   State<EditUserDialog> createState() => _EditUserDialogState();
 }
 
 class _EditUserDialogState extends State<EditUserDialog> {
-  late TextEditingController _nameController, _passwordController, _ageController;
+  static const Color brandBlue = Color(0xFF0066B3);
+  static const Color brandRed = Color(0xFFD32027);
+  static const Color darkSlate = Color(0xFF0B0E14);
+
+  late TextEditingController _nameController;
+  late TextEditingController _passwordController;
+  late TextEditingController _ageController;
   bool _saving = false;
+  bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.user['name']);
-    _ageController = TextEditingController(text: (widget.user['meta_specs']?['age'] ?? '25').toString());
+    _ageController = TextEditingController(
+      text: (widget.user['meta_specs']?['age'] ?? '25').toString(),
+    );
     _passwordController = TextEditingController();
   }
 
@@ -34,7 +44,6 @@ class _EditUserDialogState extends State<EditUserDialog> {
   void _save() async {
     setState(() => _saving = true);
 
-    // Async gaps se pehle local reference capture karna crash proof banata hai
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final bloc = context.read<UserMgmtBloc>();
@@ -42,59 +51,132 @@ class _EditUserDialogState extends State<EditUserDialog> {
     try {
       final Map<String, dynamic> updateData = {
         "name": _nameController.text.trim(),
-        "age": int.tryParse(_ageController.text) ?? 25
+        "age": int.tryParse(_ageController.text) ?? 25,
       };
       if (_passwordController.text.isNotEmpty) {
         updateData["password"] = _passwordController.text;
       }
 
-      await sl<ApiClient>().put('/api/user/${widget.user['user_id']}/update/', data: updateData);
+      await sl<ApiClient>().put(
+        '/api/user/${widget.user['user_id']}/update/',
+        data: updateData,
+      );
 
       navigator.pop();
       messenger.showSnackBar(
-          const SnackBar(content: Text("✅ Profile Registries Synced Successfully!"), backgroundColor: Colors.green)
+        const SnackBar(
+          content: Text("✅ Staff profile specifications updated successfully!"),
+          backgroundColor: Color(0xFF0D9488),
+        ),
       );
       bloc.add(LoadUsers());
-
     } catch (e) {
       messenger.showSnackBar(
-          SnackBar(content: Text("❌ Modification Fault: $e"), backgroundColor: Colors.red)
+        SnackBar(
+          content: Text("❌ Modification Fault: $e"),
+          backgroundColor: brandRed,
+        ),
       );
-
-    } finally { // ✅ FIXED: Ab 'finally' block block-level states ko background me safely toggle karega
+    } finally {
       if (mounted) {
         setState(() => _saving = false);
       }
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Container(
-        width: 360,
-        padding: const EdgeInsets.all(20),
+        width: 380,
+        padding: const EdgeInsets.all(22),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Modify Scope Specifications", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-            const SizedBox(height: 16),
-            TextField(controller: _nameController, style: const TextStyle(fontSize: 11), decoration: _inputStyle("COMPILED FULL NAME", Icons.person_outline)),
+            Row(
+              children: [
+                Container(width: 3.5, height: 16, color: brandBlue),
+                const SizedBox(width: 8),
+                const Text(
+                  "Edit Staff Specifications",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: darkSlate,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "Updating identity parameters for: ${widget.user['username'] ?? 'User'}",
+              style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 18),
+
+            TextField(
+              controller: _nameController,
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500),
+              decoration: _inputStyle("STAFF FULL NAME", Icons.badge_outlined),
+            ),
             const SizedBox(height: 12),
-            TextField(controller: _ageController, style: const TextStyle(fontSize: 11), decoration: _inputStyle("AGE PARAMETER", Icons.calendar_month_outlined)),
+
+            TextField(
+              controller: _ageController,
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500),
+              decoration: _inputStyle("AGE PARAMETER", Icons.calendar_month_outlined),
+            ),
             const SizedBox(height: 12),
-            TextField(controller: _passwordController, style: const TextStyle(fontSize: 11), obscureText: true, decoration: _inputStyle("OVERRIDE PASSWORD REGISTER", Icons.lock_reset)),
-            const SizedBox(height: 20),
+
+            TextField(
+              controller: _passwordController,
+              obscureText: _obscurePassword,
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500),
+              decoration: _inputStyle(
+                "RESET ACCESS PASSWORD (OPTIONAL)",
+                Icons.lock_reset_outlined,
+                suffix: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    size: 16,
+                    color: Colors.blueGrey,
+                  ),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                ),
+              ),
+            ),
+            const SizedBox(height: 22),
+
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL", style: TextStyle(fontSize: 11))),
-                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("CANCEL", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                ),
+                const SizedBox(width: 10),
                 ElevatedButton(
                   onPressed: _saving ? null : _save,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
-                  child: _saving ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white)) : const Text("COMMIT REGISTRY", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: brandBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                    height: 14,
+                    width: 14,
+                    child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                  )
+                      : const Text(
+                    "SAVE CHANGES",
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.4),
+                  ),
                 ),
               ],
             )
@@ -104,12 +186,17 @@ class _EditUserDialogState extends State<EditUserDialog> {
     );
   }
 
-  InputDecoration _inputStyle(String h, IconData i) => InputDecoration(
-    labelText: h,
-    labelStyle: const TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold),
-    prefixIcon: Icon(i, size: 14, color: const Color(0xFF00BCD4)),
-    border: const OutlineInputBorder(),
+  InputDecoration _inputStyle(String label, IconData icon, {Widget? suffix}) => InputDecoration(
+    labelText: label,
+    labelStyle: const TextStyle(fontSize: 9.5, color: Colors.blueGrey, fontWeight: FontWeight.bold),
+    prefixIcon: Icon(icon, size: 15, color: brandBlue),
+    suffixIcon: suffix,
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(6),
+      borderSide: const BorderSide(color: brandBlue, width: 1.5),
+    ),
     isDense: true,
-    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+    contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
   );
 }

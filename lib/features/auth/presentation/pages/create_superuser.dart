@@ -18,10 +18,8 @@ class SuperuserRegistrationRepository {
     required String lastName,
     required String email,
     required String password,
-    XFile? pickedXFile, // ✅ Fixed: Passed XFile instead of dart:io File for Web support
+    XFile? pickedXFile,
   }) async {
-
-    // Base parameters creation
     final Map<String, dynamic> payloadMap = {
       "first_name": firstName,
       "last_name": lastName,
@@ -29,7 +27,6 @@ class SuperuserRegistrationRepository {
       "password": password,
     };
 
-    // If image exists, convert via cross-platform bytes reader pipeline
     if (pickedXFile != null) {
       final Uint8List fileBytes = await pickedXFile.readAsBytes();
       payloadMap["profile_image"] = dio.MultipartFile.fromBytes(
@@ -49,7 +46,7 @@ class SuperuserRegistrationRepository {
 }
 
 // ==========================================================================
-// 2. MAIN CORE TERMINAL SCREEN UI (Mobile + Web Responsive Canvas)
+// 2. MAIN CORE TERMINAL SCREEN UI (Softwing Tech Labs Theme)
 // ==========================================================================
 class SuperuserCreateScreen extends StatefulWidget {
   const SuperuserCreateScreen({super.key});
@@ -62,18 +59,24 @@ class _SuperuserCreateScreenState extends State<SuperuserCreateScreen> {
   final _formKey = GlobalKey<FormState>();
   final _repo = SuperuserRegistrationRepository();
 
+  // --- Theme Color Palette ---
+  static const Color brandBlue = Color(0xFF0066B3);
+  static const Color brandRed = Color(0xFFD32027);
+  static const Color deepCarbon = Color(0xFF0B0E14);
+  static const Color surfaceCard = Color(0xFF141923);
+  static const Color textMuted = Color(0xFF8B949E);
+
   // --- Input Data Controllers ---
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
 
-  XFile? _pickedXFile;          // Holds web-safe media reference pointer
-  Uint8List? _webImageBytes;    // Holds local image matrix bytes for live rendering preview
+  XFile? _pickedXFile;
+  Uint8List? _webImageBytes;
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  // Cross-Platform Media Attachment Picker Framework
   Future<void> _pickProfileImage() async {
     try {
       final ImagePicker picker = ImagePicker();
@@ -93,7 +96,6 @@ class _SuperuserCreateScreenState extends State<SuperuserCreateScreen> {
     }
   }
 
-  // Pure Crashproof Execution Dispatch Sequence
   Future<void> _processRegistration() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -103,11 +105,10 @@ class _SuperuserCreateScreenState extends State<SuperuserCreateScreen> {
       context: context,
       barrierDismissible: false,
       builder: (_) => const Center(
-        child: CircularProgressIndicator(color: Colors.cyanAccent),
+        child: CircularProgressIndicator(color: brandBlue),
       ),
     );
 
-    // Dynamic Context Capture references before entering async operations gap
     final navigator = Navigator.of(context, rootNavigator: true);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final routerContext = context;
@@ -121,29 +122,27 @@ class _SuperuserCreateScreenState extends State<SuperuserCreateScreen> {
         pickedXFile: _pickedXFile,
       );
 
-      navigator.pop(); // Safe loader dismissal via snapshot reference pointer
+      navigator.pop();
 
       scaffoldMessenger.showSnackBar(
         const SnackBar(
-          content: Text("✅ Root Superuser Created Successfully! Redirecting to Auth Portal..."),
-          backgroundColor: Colors.green,
+          content: Text("✅ Softwing Superuser Account Initialized! Redirecting..."),
+          backgroundColor: Color(0xFF0D9488),
           duration: Duration(seconds: 2),
         ),
       );
 
       _resetFormCanvas();
 
-      // GoRouter Safe Redirection Pipeline Trigger
       if (mounted) {
         routerContext.go('/login');
       }
-
     } catch (e) {
-      navigator.pop(); // Dismiss loader safely on network exceptions bounds
+      navigator.pop();
       scaffoldMessenger.showSnackBar(
         SnackBar(
-          content: Text("❌ Platform Allocation Break: ${e.toString()}"),
-          backgroundColor: Colors.red,
+          content: Text("❌ Superuser Initialization Failed: ${e.toString()}"),
+          backgroundColor: brandRed,
         ),
       );
     } finally {
@@ -167,52 +166,77 @@ class _SuperuserCreateScreenState extends State<SuperuserCreateScreen> {
   @override
   Widget build(BuildContext context) {
     bool isMobile = MediaQuery.of(context).size.width < 900;
-    const Color canvasThemeColor = Color(0xFF0F4C81); // Premium Royal Industrial Blue
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: const Color(0xFF0F141C),
       appBar: AppBar(
-        backgroundColor: canvasThemeColor,
-        elevation: 1,
+        backgroundColor: deepCarbon,
+        elevation: 0,
         toolbarHeight: 70,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text("ROOT SERVER PLATFORM SETUP", style: TextStyle(fontSize: 12, color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
-            Text("ROOT SUPERUSER SPECIFICATION IDENTITY TERMINAL", style: TextStyle(fontSize: 9, color: Colors.white70)),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.asset(
+                'assets/icons/logo.png',
+                width: 28,
+                height: 28,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  "SOFTWING TECH LABS • HRMS CORE",
+                  style: TextStyle(fontSize: 12, color: brandBlue, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                ),
+                Text(
+                  "INITIALIZE ROOT SUPERUSER PROFILE",
+                  style: TextStyle(fontSize: 9, color: textMuted, letterSpacing: 0.8),
+                ),
+              ],
+            ),
           ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: Colors.white12, height: 1),
         ),
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 950), // Symmetrical Layout Anchor Box
+            constraints: const BoxConstraints(maxWidth: 920),
             child: Form(
               key: _formKey,
               child: Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
-                color: Colors.white,
+                elevation: 6,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Colors.white10),
+                ),
+                color: surfaceCard,
                 child: Padding(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(isMobile ? 20 : 36),
                   child: Column(
                     children: [
-                      // Symmetrical Form Canvas Layout Switcher Matrix
                       isMobile
-                          ? Column(children: [_buildAvatarSection(), const SizedBox(height: 24), _buildFormSection()])
+                          ? Column(children: [_buildAvatarSection(), const SizedBox(height: 28), _buildFormSection()])
                           : Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(flex: 2, child: _buildAvatarSection()),
-                          const SizedBox(width: 36),
+                          const SizedBox(width: 40),
                           Expanded(flex: 5, child: _buildFormSection()),
                         ],
                       ),
-                      const SizedBox(height: 24),
-                      const Divider(),
-                      const SizedBox(height: 12),
-                      _buildSubmissionActionBlock(canvasThemeColor, isMobile),
+                      const SizedBox(height: 28),
+                      const Divider(color: Colors.white10),
+                      const SizedBox(height: 16),
+                      _buildSubmissionActionBlock(isMobile),
                     ],
                   ),
                 ),
@@ -224,32 +248,33 @@ class _SuperuserCreateScreenState extends State<SuperuserCreateScreen> {
     );
   }
 
-  // --- Avatar Rendering Module (100% Web Compatible) ---
   Widget _buildAvatarSection() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text("PROFILE IMAGE (OPTIONAL)", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
-        const SizedBox(height: 14),
+        const Text(
+          "ROOT PROFILE AVATAR",
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70, letterSpacing: 1.0),
+        ),
+        const SizedBox(height: 16),
         Stack(
           children: [
             CircleAvatar(
-              radius: 65,
-              backgroundColor: const Color(0xFFE2E8F0),
-              // ✅ Fixed: Uses MemoryImage to circumvent Namespace browser violations completely
+              radius: 64,
+              backgroundColor: deepCarbon,
               backgroundImage: _webImageBytes != null ? MemoryImage(_webImageBytes!) : null,
               child: _webImageBytes == null
-                  ? const Icon(Icons.person_add_alt_1_rounded, size: 45, color: Color(0xFF94A3B8))
+                  ? const Icon(Icons.person_add_alt_1_rounded, size: 44, color: textMuted)
                   : null,
             ),
             Positioned(
-              bottom: 0,
-              right: 4,
+              bottom: 2,
+              right: 2,
               child: CircleAvatar(
                 radius: 18,
-                backgroundColor: const Color(0xFF0F4C81),
+                backgroundColor: brandBlue,
                 child: IconButton(
-                  icon: const Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
+                  icon: const Icon(Icons.camera_alt_rounded, size: 15, color: Colors.white),
                   onPressed: _pickProfileImage,
                 ),
               ),
@@ -258,36 +283,43 @@ class _SuperuserCreateScreenState extends State<SuperuserCreateScreen> {
         ),
         const SizedBox(height: 14),
         const Text(
-          "Click camera icon to stream gallery image. Data is parsed via local memory buffers into core server filesystem endpoints directly.",
-          style: TextStyle(fontSize: 8, color: Colors.blueGrey, height: 1.4),
+          "Upload official administrator picture for authentication logs and signature certificates.",
+          style: TextStyle(fontSize: 9, color: textMuted, height: 1.4),
           textAlign: TextAlign.center,
         ),
       ],
     );
   }
 
-  // --- Identity Fields Matrix Segment ---
   Widget _buildFormSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("IDENTITY SPECIFICATIONS DATA MATRICES", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-        const SizedBox(height: 16),
+        const Text(
+          "SUPERUSER CREDENTIALS SPECIFICATION",
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.0),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          "This account will have full access over company staff records, payroll generation, and system routes.",
+          style: TextStyle(fontSize: 10, color: textMuted),
+        ),
+        const SizedBox(height: 20),
         Row(
           children: [
             Expanded(child: _buildInputField(_firstNameCtrl, "FIRST NAME", Icons.badge_outlined)),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(child: _buildInputField(_lastNameCtrl, "LAST NAME", Icons.badge_outlined)),
           ],
         ),
         const SizedBox(height: 16),
         _buildInputField(
           _emailCtrl,
-          "ROOT SYSTEM OWNER EMAIL ADDRESS",
+          "OFFICIAL ADMIN EMAIL",
           Icons.email_outlined,
           validator: (v) {
-            if (v == null || v.isEmpty) return "Email field data context tracking cannot be empty.";
-            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v)) return "Invalid email matrix notation.";
+            if (v == null || v.isEmpty) return "Administrator email is required.";
+            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v)) return "Enter a valid email format.";
             return null;
           },
         ),
@@ -295,19 +327,39 @@ class _SuperuserCreateScreenState extends State<SuperuserCreateScreen> {
         TextFormField(
           controller: _passwordCtrl,
           obscureText: _obscurePassword,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          validator: (v) => (v == null || v.length < 6) ? "Root master password must contain at least 6 tokens." : null,
+          style: const TextStyle(fontSize: 13, color: Colors.white),
+          validator: (v) => (v == null || v.length < 8) ? "Master password must be at least 8 characters." : null,
           decoration: InputDecoration(
-            labelText: "ROOT SECURITY MASTER PASSWORD",
-            labelStyle: const TextStyle(color: Color(0xFF475569), fontSize: 10, fontWeight: FontWeight.bold),
-            prefixIcon: const Icon(Icons.lock_outline_rounded, size: 16, color: Colors.blueGrey),
+            labelText: "MASTER SECURITY PASSWORD",
+            labelStyle: const TextStyle(color: textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+            prefixIcon: const Icon(Icons.lock_outline_rounded, size: 16, color: brandBlue),
             suffixIcon: IconButton(
-              icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 16),
+              icon: Icon(
+                _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                size: 16,
+                color: textMuted,
+              ),
               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
             ),
-            border: const OutlineInputBorder(),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            isDense: true,
+            filled: true,
+            fillColor: deepCarbon,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.white12),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: brandBlue, width: 1.5),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: brandRed, width: 1.2),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: brandRed, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           ),
         ),
       ],
@@ -317,42 +369,64 @@ class _SuperuserCreateScreenState extends State<SuperuserCreateScreen> {
   Widget _buildInputField(TextEditingController ctrl, String label, IconData icon, {String? Function(String?)? validator}) {
     return TextFormField(
       controller: ctrl,
-      validator: validator ?? (v) => (v == null || v.trim().isEmpty) ? "$label mapping context cannot be blank." : null,
-      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+      validator: validator ?? (v) => (v == null || v.trim().isEmpty) ? "$label cannot be blank." : null,
+      style: const TextStyle(fontSize: 13, color: Colors.white),
       textInputAction: TextInputAction.next,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Color(0xFF475569), fontSize: 10, fontWeight: FontWeight.bold),
-        prefixIcon: Icon(icon, size: 16, color: Colors.blueGrey),
-        border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        isDense: true,
+        labelStyle: const TextStyle(color: textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+        prefixIcon: Icon(icon, size: 16, color: brandBlue),
+        filled: true,
+        fillColor: deepCarbon,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Colors.white12),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: brandBlue, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: brandRed, width: 1.2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: brandRed, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       ),
     );
   }
 
-  Widget _buildSubmissionActionBlock(Color activeColor, bool isMobile) {
+  Widget _buildSubmissionActionBlock(bool isMobile) {
     final List<Widget> submissionWidgets = [
-      const Row(
+      Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.shield_outlined, color: Colors.green, size: 14),
-          SizedBox(width: 6),
-          Text("Security Sandbox Boundaries Checked & Mapped.", style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.w500)),
+        children: const [
+          Icon(Icons.verified_user_outlined, color: Color(0xFF10B981), size: 16),
+          SizedBox(width: 8),
+          Text(
+            "MSME Certified Portal Security Active",
+            style: TextStyle(fontSize: 10, color: textMuted, fontWeight: FontWeight.w600),
+          ),
         ],
       ),
       if (isMobile) const SizedBox(height: 16),
       ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
-          backgroundColor: activeColor,
+          backgroundColor: brandBlue,
           foregroundColor: Colors.white,
-          minimumSize: isMobile ? const Size(double.infinity, 46) : const Size(280, 46),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          elevation: 2,
+          minimumSize: isMobile ? const Size(double.infinity, 48) : const Size(290, 48),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          elevation: 0,
         ),
         onPressed: _isLoading ? null : _processRegistration,
-        icon: const Icon(Icons.cloud_done_outlined, size: 16),
-        label: const Text("INITIALIZE PLATFORM ROOT OWNERSHIP", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+        icon: const Icon(Icons.shield_outlined, size: 18),
+        label: const Text(
+          "INITIALIZE ROOT SUPERUSER",
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+        ),
       ),
     ];
 

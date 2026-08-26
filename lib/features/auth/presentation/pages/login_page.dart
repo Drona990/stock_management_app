@@ -16,11 +16,13 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
 
-  // --- Premium Industrial Financial Themes ---
-  static const Color cyanPrimary = Color(0xFF00BCD4);
-  static const Color slateNavy = Color(0xFF1E293B);
-  static const Color deepCarbon = Color(0xFF0F172A);
-  static const Color inputBgFields = Color(0xFFF8FAFC);
+  // --- Softwing Tech Labs Corporate Theme Palette ---
+  static const Color brandBlue = Color(0xFF0066B3);
+  static const Color brandRed = Color(0xFFD32027);
+  static const Color deepCarbon = Color(0xFF0B0E14);
+  static const Color surfaceCard = Color(0xFF141923);
+  static const Color inputBgLight = Color(0xFFF8FAFC);
+  static const Color textMuted = Color(0xFF8B949E);
 
   @override
   Widget build(BuildContext context) {
@@ -31,43 +33,85 @@ class _LoginPageState extends State<LoginPage> {
       backgroundColor: deepCarbon,
       body: Row(
         children: [
+          // Left Banner: Desktop Branding & HRMS Context
           if (isDesktop)
             Expanded(
               flex: 4,
               child: Container(
                 color: deepCarbon,
-                padding: const EdgeInsets.all(50),
+                padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 50),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    // Brand Badge Header
+                    Row(
                       children: [
-                        Icon(Icons.account_balance_rounded, size: 28, color: cyanPrimary),
-                        SizedBox(width: 12),
-                        Text(
-                          "CORE FINANCE LOGISTICS",
-                          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.asset(
+                            'assets/icons/logo.png',
+                            width: 32,
+                            height: 32,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        const Text(
+                          "SOFTWING TECH LABS",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.0,
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 48),
+                    RichText(
+                      text: const TextSpan(
+                        children: [
+                          TextSpan(
+                            text: "Unified Workforce\n& ",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 38,
+                              fontWeight: FontWeight.w900,
+                              height: 1.2,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          TextSpan(
+                            text: "Payroll Portal.",
+                            style: TextStyle(
+                              color: brandBlue,
+                              fontSize: 38,
+                              fontWeight: FontWeight.w900,
+                              height: 1.2,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
                     const Text(
-                      "Commercial Ledger\n& Auditing Portal Engine.",
-                      style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900, height: 1.2, letterSpacing: -0.5),
+                      "Secure enterprise workspace for managing employee master records, dynamic attendance, digital salary slips, and verified credentials.",
+                      style: TextStyle(
+                        color: textMuted,
+                        fontSize: 13,
+                        height: 1.6,
+                        letterSpacing: 0.2,
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      "Secure multi-tenant accounting core gateway. Enter corporate digital certificates signature keys to sync unified data directories ledger sheets.",
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 12, height: 1.6, letterSpacing: 0.2),
-                    ),
-                    const SizedBox(height: 50),
-                    // Quick micro security indicator badges
+                    const SizedBox(height: 48),
+                    // Trust & Compliance Badges
                     Row(
                       children: [
-                        _buildStatusIndicator("AES-256 BANKING ENCRYPTION"),
+                        _buildStatusIndicator("MSME RECOGNIZED", brandBlue),
                         const SizedBox(width: 12),
-                        _buildStatusIndicator("COMPLIANT TAX WORKSPACE"),
+                        _buildStatusIndicator("ROLE-BASED JWT ACCESS", Colors.greenAccent),
                       ],
                     ),
                   ],
@@ -75,6 +119,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
 
+          // Right Banner: Login Credentials Form
           Expanded(
             flex: isDesktop ? 3 : 7,
             child: Container(
@@ -82,7 +127,7 @@ class _LoginPageState extends State<LoginPage> {
               color: isDesktop ? Colors.white : deepCarbon,
               alignment: Alignment.center,
               child: SingleChildScrollView(
-                padding: EdgeInsets.all(isDesktop ? 50 : 20),
+                padding: EdgeInsets.all(isDesktop ? 50 : 24),
                 child: Container(
                   constraints: const BoxConstraints(maxWidth: 400),
                   child: BlocConsumer<LoginBloc, LoginState>(
@@ -100,123 +145,172 @@ class _LoginPageState extends State<LoginPage> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Mobile View Top Branding Wrapper
+                            // Mobile Top Logo View
                             if (!isDesktop) ...[
-                              const Center(
-                                child: CircleAvatar(
-                                  radius: 24,
-                                  backgroundColor: Colors.white10,
-                                  child: Icon(Icons.account_balance_rounded, size: 22, color: cyanPrimary),
+                              Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: surfaceCard,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.white12),
+                                  ),
+                                  child: Image.asset(
+                                    'assets/icons/logo.png',
+                                    width: 42,
+                                    height: 42,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 14),
                               const Center(
                                 child: Text(
-                                  "COMMERCIAL LEDGER SYSTEM",
-                                  style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                                  "SOFTWING TECH LABS • HRMS",
+                                  style: TextStyle(
+                                    color: brandBlue,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.5,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 40),
+                              const SizedBox(height: 36),
                             ],
 
                             Text(
-                              "System Sign In",
+                              "Sign In to HRMS",
                               style: TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w900,
-                                  color: isDesktop ? deepCarbon : Colors.white,
-                                  letterSpacing: -0.5
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                                color: isDesktop ? deepCarbon : Colors.white,
+                                letterSpacing: -0.5,
                               ),
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              "Provide certified credentials below to sync ledger registries.",
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
-                            ),
-                            const SizedBox(height: 24),
-
-                            // Input Layer 1: Account Identifier Checkbox
-                            Text(
-                              "ACCOUNT IDENTIFICATION",
+                              "Enter your official credentials to access staff operations.",
                               style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 9,
-                                  color: isDesktop ? slateNavy.withOpacity(0.7) : Colors.grey.shade400,
-                                  letterSpacing: 1.0
+                                fontSize: 12,
+                                color: isDesktop ? Colors.grey.shade600 : textMuted,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+
+                            // Field 1: User / Email
+                            Text(
+                              "USERNAME OR WORK EMAIL",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                                color: isDesktop ? const Color(0xFF1E293B) : Colors.grey.shade400,
+                                letterSpacing: 0.8,
                               ),
                             ),
                             const SizedBox(height: 8),
                             TextFormField(
                               controller: _loginController,
-                              style: TextStyle(fontSize: 13, color: isDesktop ? deepCarbon : Colors.white),
-                              decoration: _inputDecoration(Icons.person_outline_rounded, "Username or Corporate Email", isDesktop),
-                              validator: (v) => (v == null || v.isEmpty) ? "Identification target context required" : null,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDesktop ? deepCarbon : Colors.white,
+                              ),
+                              decoration: _inputDecoration(
+                                Icons.badge_outlined,
+                                "e.g. admin or employee@softwing.com",
+                                isDesktop,
+                              ),
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? "Identification required"
+                                  : null,
                             ),
                             const SizedBox(height: 20),
 
-                            // Input Layer 2: Security Key Parameters
+                            // Field 2: Password
                             Text(
-                              "ACCOUNT SECURITY KEY",
+                              "PORTAL PASSWORD",
                               style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 9,
-                                  color: isDesktop ? slateNavy.withOpacity(0.7) : Colors.grey.shade400,
-                                  letterSpacing: 1.0
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                                color: isDesktop ? const Color(0xFF1E293B) : Colors.grey.shade400,
+                                letterSpacing: 0.8,
                               ),
                             ),
                             const SizedBox(height: 8),
                             TextFormField(
                               controller: _passwordController,
                               obscureText: !_isPasswordVisible,
-                              style: TextStyle(fontSize: 13, color: isDesktop ? deepCarbon : Colors.white),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDesktop ? deepCarbon : Colors.white,
+                              ),
                               decoration: _inputDecoration(
-                                Icons.lock_open_rounded,
-                                "Account Access Token Key",
+                                Icons.lock_outline_rounded,
+                                "Enter your access password",
                                 isDesktop,
                                 suffix: IconButton(
                                   icon: Icon(
-                                      _isPasswordVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                                      size: 16,
-                                      color: cyanPrimary
+                                    _isPasswordVisible
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 18,
+                                    color: brandBlue,
                                   ),
-                                  onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                                  onPressed: () => setState(
+                                          () => _isPasswordVisible = !_isPasswordVisible),
                                 ),
                               ),
-                              validator: (v) => (v == null || v.length < 4) ? "Invalid structural password sequence" : null,
+                              validator: (v) => (v == null || v.length < 4)
+                                  ? "Enter a valid password"
+                                  : null,
                             ),
 
-                            const SizedBox(height: 30),
+                            const SizedBox(height: 32),
 
-                            // Dynamic Action Core Execution Dispatch Button
+                            // Action Button: Primary Tech Blue
                             SizedBox(
                               width: double.infinity,
-                              height: 46,
+                              height: 48,
                               child: ElevatedButton(
                                 onPressed: state is LoginLoading ? null : _handleLogin,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: cyanPrimary,
+                                  backgroundColor: brandBlue,
                                   foregroundColor: Colors.white,
                                   elevation: 0,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
                                 child: state is LoginLoading
                                     ? const SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
                                 )
                                     : const Text(
-                                    "AUTHENTICATE FINANCE ARCHITECTURE",
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)
+                                  "AUTHENTICATE & ENTER",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 28),
 
+                            // Footer Tag
                             Center(
                               child: Text(
-                                "FINANCIAL CONTEXT DESCRIPTOR APP CORE ENGINE v1.1.0-STABLE",
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 8, fontWeight: FontWeight.bold),
+                                "SOFTWING HR & WORKFORCE CORE v1.0.0",
+                                style: TextStyle(
+                                  color: isDesktop ? Colors.grey.shade400 : textMuted.withOpacity(0.6),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.8,
+                                ),
                               ),
                             ),
                           ],
@@ -235,38 +329,68 @@ class _LoginPageState extends State<LoginPage> {
 
   InputDecoration _inputDecoration(IconData icon, String hint, bool isDesktop, {Widget? suffix}) {
     return InputDecoration(
-      prefixIcon: Icon(icon, size: 16, color: isDesktop ? slateNavy.withOpacity(0.5) : Colors.white60),
+      prefixIcon: Icon(
+        icon,
+        size: 18,
+        color: isDesktop ? const Color(0xFF64748B) : Colors.white60,
+      ),
       suffixIcon: suffix,
       hintText: hint,
-      hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+      hintStyle: TextStyle(
+        color: isDesktop ? Colors.grey.shade400 : Colors.white30,
+        fontSize: 12,
+      ),
       filled: true,
-      fillColor: isDesktop ? inputBgFields : Colors.white.withOpacity(0.04),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(4),
-        borderSide: isDesktop ? BorderSide.none : const BorderSide(color: Colors.white10),
+      fillColor: isDesktop ? inputBgLight : surfaceCard,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(
+          color: isDesktop ? const Color(0xFFE2E8F0) : Colors.white12,
+          width: 1.0,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(4),
-        borderSide: const BorderSide(color: cyanPrimary, width: 1.2),
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: brandBlue, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: brandRed, width: 1.2),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: brandRed, width: 1.5),
       ),
     );
   }
 
-  Widget _buildStatusIndicator(String label) {
+  Widget _buildStatusIndicator(String label, Color dotColor) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(4),
+        color: surfaceCard,
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.white10),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 5, height: 5, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.greenAccent)),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
+          ),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.6,
+            ),
+          ),
         ],
       ),
     );
@@ -275,11 +399,14 @@ class _LoginPageState extends State<LoginPage> {
   void _showCustomSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-        backgroundColor: Colors.redAccent,
+        content: Text(
+          message,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+        ),
+        backgroundColor: brandRed,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     );
   }
@@ -287,7 +414,7 @@ class _LoginPageState extends State<LoginPage> {
   void _handleLogin() {
     if (_formKey.currentState!.validate()) {
       context.read<LoginBloc>().add(
-        LoginSubmitted(_loginController.text, _passwordController.text),
+        LoginSubmitted(_loginController.text.trim(), _passwordController.text),
       );
     }
   }
