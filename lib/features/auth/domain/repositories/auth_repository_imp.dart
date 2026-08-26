@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 
@@ -16,142 +14,80 @@ class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource remoteDataSource;
   final FlutterSecureStorage storage;
 
-  AuthRepositoryImpl({
-    required this.remoteDataSource,
-    required this.storage,
-  });
+  AuthRepositoryImpl({required this.remoteDataSource, required this.storage});
 
   @override
-  Future<Either<Failure, AuthEntity>> login(String username, String password) async {
-    try {
-      final model = await remoteDataSource.login(username, password);
-      final String accessToken = model.access ?? "";
-      final String refreshToken = model.refresh ?? "";
-
-      if (accessToken.isEmpty) {
-        return Left(ServerFailure("Token missing"));
-      }
-
-      // 1. Response credentials metadata securely preserve karein
-      await storage.write(key: 'access_token', value: accessToken);
-      await storage.write(key: 'refresh_token', value: refreshToken);
-      await storage.write(key: 'user_role', value: model.role ?? 'admin');
-      await storage.write(key: 'username', value: model.fullName ?? username);
-      await storage.write(key: 'user_id', value: model.userId ?? '');
-      await storage.write(key: 'session_id', value: model.sessionId ?? '');
-
-      _updateDI(accessToken, refreshToken);
-
-      // User profile configuration metrics dynamically mapping pull karna
-      final profileResult = await getUserProfile();
-
-      return profileResult.fold(
-            (failure) => Left(failure),
-            (data) {
-          debugPrint("✅ Session mapping metadata fully synced into Storage.");
-          return Right(model.toEntity());
-        },
-      );
-    } catch (e) {
-      return Left(ServerFailure(e.toString()));
-    }
-  }
-
-  @override
-  Future<Either<Failure, Map<String, String>>> getUserProfile() async {
-    try {
-      final response = await remoteDataSource.getUserDashboard();
-      final responseBody = response.data;
-
-      if (responseBody == null || responseBody['data'] == null) {
-        return Left(ServerFailure("Server returned no data"));
-      }
-
-      final dataMap = responseBody['data'];
-      final userData = dataMap['user'];
-
-      if (userData == null) {
-        return Left(ServerFailure("User profile data missing"));
-      }
-
-      final String role = userData['role']?.toString() ?? "admin";
-      final String name = userData['name']?.toString() ?? "User";
-      final String userId = userData['user_id']?.toString() ?? "";
-
-      // 🌟 PRESERVE ALLOWED ROUTES FOR DYNAMIC SIDEBAR PERMISSIONS
-      final List<dynamic> allowedRoutesList = userData['allowed_routes'] ?? [];
-      final String allowedRoutesJson = jsonEncode(allowedRoutesList.cast<String>());
-      await storage.write(key: 'user_allowed_routes', value: allowedRoutesJson);
-
-      String locationName = "Default Location";
-      String locationId = "0";
-
-      if (userData['location'] != null && userData['location'] is Map) {
-        locationName = userData['location']['name']?.toString() ?? "Default Location";
-        locationId = userData['location']['id']?.toString() ?? "0";
-      }
-
-      debugPrint("✅ Dynamic System Metrics Profile Sync Completed.");
-
-      await storage.write(key: 'user_role', value: role);
-      await storage.write(key: 'username', value: name);
-      await storage.write(key: 'user_id', value: userId);
-      await storage.write(key: 'location_name', value: locationName);
-      await storage.write(key: 'location_id', value: locationId);
-
-      return Right({
-        'role': role,
-        'name': name,
-        'location': locationName,
-        'location_id': locationId,
-      });
-
-    } on DioException catch (e) {
-      return Left(ServerFailure(e.response?.data['message'] ?? "Profile Fetch Failed"));
-    } catch (e) {
-      debugPrint("Profile Parsing Error: $e");
-      return Left(ServerFailure("Data Parsing Error"));
-    }
-  }
-
-  @override
-  Future<void> updateFCMToken() async {
-    if (!kIsWeb && Platform.isWindows) {
-      debugPrint("FCM Registration skipped on Windows Desktop");
-      return;
-    }
-    try {
-      String fcmToken = "Demo";
-      await remoteDataSource.updateFCMToken(fcmToken);
-    } catch (e) {
-      debugPrint("FCM Update Error: $e");
-    }
-  }
-
-  @override
-  Future<Either<Failure, AuthEntity>> switchUser(String targetUserId) async {
+  Future<Either<Failure, AuthEntity>> loginWithCredentials(String username, String password) async {
     try {
       final response = await remoteDataSource.apiClient.post(
-        "/api/auth/silent-switch/",
-        data: {"user_id": targetUserId},
+        '/api/auth/login/',
+        data: {'email': username, 'password': password},
       );
-
-      if (response.data['success'] == true) {
-        final model = AuthModel.fromJson(response.data['data']);
-
-        await storage.write(key: 'access_token', value: model.access);
-        await storage.write(key: 'refresh_token', value: model.refresh);
-        await storage.write(key: 'session_id', value: model.sessionId);
-
-        _updateDI(model.access!, model.refresh!);
-        await getUserProfile();
-
-        return Right(model.toEntity());
-      }
-      return Left(ServerFailure("Identity Switch Failed"));
+      final model = AuthModel.fromJson(response.data);
+      return _processAuthSuccess(model);
+    } on DioException catch (e) {
+      return Left(ServerFailure(e.response?.data['error'] ?? e.response?.data['detail'] ?? "Login Failed"));
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }
+  }
+
+  @override
+  Future<Either<Failure, AuthEntity>> loginWithQR(String qrToken) async {
+    try {
+      final response = await remoteDataSource.apiClient.post(
+        '/api/hrms/auth/qr-login/',
+        data: {'qr_token': qrToken},
+      );
+      final model = AuthModel.fromJson(response.data);
+      return _processAuthSuccess(model);
+    } on DioException catch (e) {
+      return Left(ServerFailure(e.response?.data['error'] ?? "Invalid or expired QR Token"));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, AuthEntity>> _processAuthSuccess(AuthModel model) async {
+    if (model.access == null || model.access!.isEmpty) {
+      return Left(ServerFailure("Security Token Missing"));
+    }
+
+    final entity = model.toEntity();
+
+    await storage.write(key: 'access_token', value: entity.accessToken);
+    await storage.write(key: 'refresh_token', value: entity.refreshToken);
+    await storage.write(key: 'user_id', value: entity.userId);
+    await storage.write(key: 'employee_id', value: entity.employeeId);
+    await storage.write(key: 'emp_code', value: entity.empCode);
+    await storage.write(key: 'full_name', value: entity.fullName);
+    await storage.write(key: 'department', value: entity.department);
+    await storage.write(key: 'designation', value: entity.designation);
+    await storage.write(key: 'shift_code', value: entity.shiftCode);
+    await storage.write(key: 'shift_name', value: entity.shiftName);
+    await storage.write(key: 'shift_start', value: entity.shiftStart);
+    await storage.write(key: 'shift_end', value: entity.shiftEnd);
+
+    _updateDI(entity.accessToken, entity.refreshToken);
+    return Right(entity);
+  }
+
+  @override
+  Future<Either<Failure, Map<String, dynamic>>> getEmployeeDashboardData() async {
+    try {
+      final response = await remoteDataSource.apiClient.get('/api/employee/dashboard/');
+      return Right(response.data['data'] ?? {});
+    } catch (e) {
+      return Left(ServerFailure("Failed to sync dashboard metrics"));
+    }
+  }
+
+  @override
+  Future<void> updateFCMToken() async {}
+
+  @override
+  Future<void> logout() async {
+    await storage.deleteAll();
   }
 
   void _updateDI(String access, String refresh) {

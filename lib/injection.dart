@@ -2,7 +2,6 @@ import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:stock_management/features/managment/injection_prtns.dart';
 import 'core/network/api_client.dart';
 import 'core/network/network_info.dart';
 import 'core/utils/websocket/websocket_service.dart';
@@ -34,5 +33,4 @@ Future<void> init() async {
 
   // Features
   await initAuthInjection(sl);
-  await initManagementInjection(sl);
 }

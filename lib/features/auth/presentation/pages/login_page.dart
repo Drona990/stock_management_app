@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+
 import '../block/login_bloc.dart';
 
 class LoginPage extends StatefulWidget {
@@ -10,19 +12,48 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   final _formKey = GlobalKey<FormState>();
   final _loginController = TextEditingController();
   final _passwordController = TextEditingController();
+  final MobileScannerController _scannerController = MobileScannerController();
   bool _isPasswordVisible = false;
+  bool _isScanningLocked = false;
 
-  // --- Softwing Tech Labs Corporate Theme Palette ---
+  // Theme Colors
   static const Color brandBlue = Color(0xFF0066B3);
-  static const Color brandRed = Color(0xFFD32027);
-  static const Color deepCarbon = Color(0xFF0B0E14);
-  static const Color surfaceCard = Color(0xFF141923);
-  static const Color inputBgLight = Color(0xFFF8FAFC);
+  static const Color brandCyan = Color(0xFF06B6D4);
+  static const Color deepCarbon = Color(0xFF0F172A);
+  static const Color surfaceDark = Color(0xFF1E293B);
   static const Color textMuted = Color(0xFF8B949E);
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _loginController.dispose();
+    _passwordController.dispose();
+    _scannerController.dispose();
+    super.dispose();
+  }
+
+  void _onDetectBarcode(BarcodeCapture capture) {
+    if (_isScanningLocked) return;
+    final barcodes = capture.barcodes;
+    if (barcodes.isEmpty) return;
+
+    final String? raw = barcodes.first.rawValue;
+    if (raw != null && raw.isNotEmpty) {
+      setState(() => _isScanningLocked = true);
+      context.read<LoginBloc>().add(LoginWithQRSubmitted(raw));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,364 +62,208 @@ class _LoginPageState extends State<LoginPage> {
 
     return Scaffold(
       backgroundColor: deepCarbon,
-      body: Row(
-        children: [
-          // Left Banner: Desktop Branding & HRMS Context
-          if (isDesktop)
-            Expanded(
-              flex: 4,
+      body: BlocConsumer<LoginBloc, LoginState>(
+        listener: (context, state) {
+          if (state is LoginSuccess) {
+            context.go('/dashboard');
+          } else if (state is LoginFailure) {
+            setState(() => _isScanningLocked = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.error, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                backgroundColor: Colors.redAccent,
+                behavior: SnackBarBehavior.floating,
+                margin: const EdgeInsets.all(16),
+              ),
+            );
+          }
+        },
+        builder: (context, state) {
+          return Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
               child: Container(
-                color: deepCarbon,
-                padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 50),
+                constraints: const BoxConstraints(maxWidth: 420),
+                decoration: BoxDecoration(
+                  color: surfaceDark,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white10),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 8))
+                  ],
+                ),
+                padding: const EdgeInsets.all(24),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Brand Badge Header
+                    // Header Logo & Branding
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.asset(
-                            'assets/icons/logo.png',
-                            width: 32,
-                            height: 32,
-                            fit: BoxFit.contain,
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: brandBlue.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(10),
                           ),
+                          child: const Icon(Icons.fingerprint_rounded, color: brandCyan, size: 24),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 10),
                         const Text(
-                          "SOFTWING TECH LABS",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 2.0,
-                          ),
+                          "SOFTWING WORKFORCE",
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 1.2),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 48),
-                    RichText(
-                      text: const TextSpan(
-                        children: [
-                          TextSpan(
-                            text: "Unified Workforce\n& ",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 38,
-                              fontWeight: FontWeight.w900,
-                              height: 1.2,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          TextSpan(
-                            text: "Payroll Portal.",
-                            style: TextStyle(
-                              color: brandBlue,
-                              fontSize: 38,
-                              fontWeight: FontWeight.w900,
-                              height: 1.2,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      "Enterprise Personnel Self-Service Portal",
+                      style: TextStyle(color: textMuted, fontSize: 10.5),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Navigation Tabs: QR Access vs Credentials
+                    Container(
+                      height: 40,
+                      decoration: BoxDecoration(color: deepCarbon, borderRadius: BorderRadius.circular(8)),
+                      child: TabBar(
+                        controller: _tabController,
+                        labelColor: Colors.white,
+                        unselectedLabelColor: textMuted,
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        indicator: BoxDecoration(color: brandBlue, borderRadius: BorderRadius.circular(7)),
+                        labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        tabs: const [
+                          Tab(iconMargin: EdgeInsets.zero, text: "QR PASS SCAN"),
+                          Tab(iconMargin: EdgeInsets.zero, text: "CREDENTIALS"),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      "Secure enterprise workspace for managing employee master records, dynamic attendance, digital salary slips, and verified credentials.",
-                      style: TextStyle(
-                        color: textMuted,
-                        fontSize: 13,
-                        height: 1.6,
-                        letterSpacing: 0.2,
+                    const SizedBox(height: 20),
+
+                    // Tab Views
+                    SizedBox(
+                      height: 300,
+                      child: TabBarView(
+                        controller: _tabController,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [
+                          // Tab 1: Live QR Scanner
+                          _buildQRScannerTab(state),
+
+                          // Tab 2: Manual Email & Password Form
+                          _buildCredentialsFormTab(state),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 48),
-                    // Trust & Compliance Badges
-                    Row(
-                      children: [
-                        _buildStatusIndicator("MSME RECOGNIZED", brandBlue),
-                        const SizedBox(width: 12),
-                        _buildStatusIndicator("ROLE-BASED JWT ACCESS", Colors.greenAccent),
-                      ],
+
+                    const SizedBox(height: 10),
+                    const Text(
+                      "SOFTWING HRMS • POWERED BY ZERO-TRUST SECURITY",
+                      style: TextStyle(color: Colors.white24, fontSize: 8.5, fontWeight: FontWeight.bold, letterSpacing: 0.6),
                     ),
                   ],
                 ),
               ),
             ),
+          );
+        },
+      ),
+    );
+  }
 
-          // Right Banner: Login Credentials Form
-          Expanded(
-            flex: isDesktop ? 3 : 7,
-            child: Container(
-              height: double.infinity,
-              color: isDesktop ? Colors.white : deepCarbon,
-              alignment: Alignment.center,
-              child: SingleChildScrollView(
-                padding: EdgeInsets.all(isDesktop ? 50 : 24),
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  child: BlocConsumer<LoginBloc, LoginState>(
-                    listener: (context, state) {
-                      if (state is LoginSuccess) {
-                        context.go("/dashboard");
-                      } else if (state is LoginFailure) {
-                        _showCustomSnackBar(context, state.error);
-                      }
-                    },
-                    builder: (context, state) {
-                      return Form(
-                        key: _formKey,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Mobile Top Logo View
-                            if (!isDesktop) ...[
-                              Center(
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: surfaceCard,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.white12),
-                                  ),
-                                  child: Image.asset(
-                                    'assets/icons/logo.png',
-                                    width: 42,
-                                    height: 42,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              const Center(
-                                child: Text(
-                                  "SOFTWING TECH LABS • HRMS",
-                                  style: TextStyle(
-                                    color: brandBlue,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 36),
-                            ],
-
-                            Text(
-                              "Sign In to HRMS",
-                              style: TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.w900,
-                                color: isDesktop ? deepCarbon : Colors.white,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              "Enter your official credentials to access staff operations.",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDesktop ? Colors.grey.shade600 : textMuted,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 28),
-
-                            // Field 1: User / Email
-                            Text(
-                              "USERNAME OR WORK EMAIL",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10,
-                                color: isDesktop ? const Color(0xFF1E293B) : Colors.grey.shade400,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _loginController,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDesktop ? deepCarbon : Colors.white,
-                              ),
-                              decoration: _inputDecoration(
-                                Icons.badge_outlined,
-                                "e.g. admin or employee@softwing.com",
-                                isDesktop,
-                              ),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? "Identification required"
-                                  : null,
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Field 2: Password
-                            Text(
-                              "PORTAL PASSWORD",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10,
-                                color: isDesktop ? const Color(0xFF1E293B) : Colors.grey.shade400,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _passwordController,
-                              obscureText: !_isPasswordVisible,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDesktop ? deepCarbon : Colors.white,
-                              ),
-                              decoration: _inputDecoration(
-                                Icons.lock_outline_rounded,
-                                "Enter your access password",
-                                isDesktop,
-                                suffix: IconButton(
-                                  icon: Icon(
-                                    _isPasswordVisible
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
-                                    size: 18,
-                                    color: brandBlue,
-                                  ),
-                                  onPressed: () => setState(
-                                          () => _isPasswordVisible = !_isPasswordVisible),
-                                ),
-                              ),
-                              validator: (v) => (v == null || v.length < 4)
-                                  ? "Enter a valid password"
-                                  : null,
-                            ),
-
-                            const SizedBox(height: 32),
-
-                            // Action Button: Primary Tech Blue
-                            SizedBox(
-                              width: double.infinity,
-                              height: 48,
-                              child: ElevatedButton(
-                                onPressed: state is LoginLoading ? null : _handleLogin,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: brandBlue,
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: state is LoginLoading
-                                    ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                                    : const Text(
-                                  "AUTHENTICATE & ENTER",
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.0,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 28),
-
-                            // Footer Tag
-                            Center(
-                              child: Text(
-                                "SOFTWING HR & WORKFORCE CORE v1.0.0",
-                                style: TextStyle(
-                                  color: isDesktop ? Colors.grey.shade400 : textMuted.withOpacity(0.6),
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+  Widget _buildQRScannerTab(LoginState state) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 200,
+          height: 200,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: brandCyan, width: 2),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Stack(
+              children: [
+                MobileScanner(
+                  controller: _scannerController,
+                  onDetect: _onDetectBarcode,
                 ),
+                if (state is LoginLoading)
+                  Container(
+                    color: Colors.black54,
+                    child: const Center(child: CircularProgressIndicator(color: brandCyan)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          "Scan the Login Pass assigned by your Admin to enter.",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: textMuted, fontSize: 10.5),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCredentialsFormTab(LoginState state) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text("OFFICIAL WORK EMAIL / EMP CODE", style: TextStyle(color: textMuted, fontSize: 9.5, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _loginController,
+            style: const TextStyle(fontSize: 12, color: Colors.white),
+            decoration: _inputStyle(Icons.alternate_email_rounded, "name@softwing.in"),
+            validator: (v) => (v == null || v.trim().isEmpty) ? "Required" : null,
+          ),
+          const SizedBox(height: 14),
+          const Text("PORTAL PASSWORD", style: TextStyle(color: textMuted, fontSize: 9.5, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _passwordController,
+            obscureText: !_isPasswordVisible,
+            style: const TextStyle(fontSize: 12, color: Colors.white),
+            decoration: _inputStyle(
+              Icons.lock_outline_rounded,
+              "Enter your password",
+              suffix: IconButton(
+                icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off, size: 16, color: textMuted),
+                onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
               ),
             ),
+            validator: (v) => (v == null || v.length < 4) ? "Valid password required" : null,
           ),
-        ],
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration(IconData icon, String hint, bool isDesktop, {Widget? suffix}) {
-    return InputDecoration(
-      prefixIcon: Icon(
-        icon,
-        size: 18,
-        color: isDesktop ? const Color(0xFF64748B) : Colors.white60,
-      ),
-      suffixIcon: suffix,
-      hintText: hint,
-      hintStyle: TextStyle(
-        color: isDesktop ? Colors.grey.shade400 : Colors.white30,
-        fontSize: 12,
-      ),
-      filled: true,
-      fillColor: isDesktop ? inputBgLight : surfaceCard,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(
-          color: isDesktop ? const Color(0xFFE2E8F0) : Colors.white12,
-          width: 1.0,
-        ),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: brandBlue, width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: brandRed, width: 1.2),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: brandRed, width: 1.5),
-      ),
-    );
-  }
-
-  Widget _buildStatusIndicator(String label, Color dotColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: surfaceCard,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.6,
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: brandBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: state is LoginLoading
+                  ? null
+                  : () {
+                if (_formKey.currentState!.validate()) {
+                  context.read<LoginBloc>().add(
+                    LoginSubmitted(_loginController.text.trim(), _passwordController.text),
+                  );
+                }
+              },
+              child: state is LoginLoading
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text("AUTHENTICATE ACCOUNT", style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -396,26 +271,16 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  void _showCustomSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-        ),
-        backgroundColor: brandRed,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-      ),
+  InputDecoration _inputStyle(IconData icon, String hint, {Widget? suffix}) {
+    return InputDecoration(
+      prefixIcon: Icon(icon, color: Colors.white60, size: 16),
+      suffixIcon: suffix,
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+      filled: true,
+      fillColor: deepCarbon,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
     );
-  }
-
-  void _handleLogin() {
-    if (_formKey.currentState!.validate()) {
-      context.read<LoginBloc>().add(
-        LoginSubmitted(_loginController.text.trim(), _passwordController.text),
-      );
-    }
   }
 }

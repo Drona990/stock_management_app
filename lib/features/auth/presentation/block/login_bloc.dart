@@ -1,27 +1,34 @@
+import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 
 // Events
 abstract class LoginEvent {}
+
 class LoginSubmitted extends LoginEvent {
   final String login;
   final String password;
   LoginSubmitted(this.login, this.password);
 }
-class SwitchUserRequested extends LoginEvent {
-  final String userId; // ✅ int ko String kar diya
-  SwitchUserRequested(this.userId);
+
+class LoginWithQRSubmitted extends LoginEvent {
+  final String rawQrCode;
+  LoginWithQRSubmitted(this.rawQrCode);
 }
 
 // States
 abstract class LoginState {}
+
 class LoginInitial extends LoginState {}
+
 class LoginLoading extends LoginState {}
+
 class LoginSuccess extends LoginState {
   final AuthEntity auth;
   LoginSuccess(this.auth);
 }
+
 class LoginFailure extends LoginState {
   final String error;
   LoginFailure(this.error);
@@ -31,37 +38,30 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   final AuthRepository repository;
 
   LoginBloc(this.repository) : super(LoginInitial()) {
-
-    on<SwitchUserRequested>((event, emit) async {
+    on<LoginSubmitted>((event, emit) async {
       emit(LoginLoading());
-      final result = await repository.switchUser(event.userId);
+      final result = await repository.loginWithCredentials(event.login, event.password);
       result.fold(
             (failure) => emit(LoginFailure(failure.message)),
-            (auth) => emit(LoginSuccess(auth)), // Ye app ko dashboard pe reload kar dega
+            (auth) => emit(LoginSuccess(auth)),
       );
     });
 
-    on<LoginSubmitted>((event, emit) async {
+    on<LoginWithQRSubmitted>((event, emit) async {
       emit(LoginLoading());
 
-      final result = await repository.login(event.login, event.password);
+      String token = event.rawQrCode;
+      try {
+        final parsed = jsonDecode(event.rawQrCode);
+        if (parsed is Map && parsed.containsKey('qr_token')) {
+          token = parsed['qr_token'];
+        }
+      } catch (_) {}
 
-      await result.fold(
-            (failure) async {
-          emit(LoginFailure(failure.message));
-        },
-            (auth) async {
-          repository.updateFCMToken();
-
-          final profileResult = await repository.getUserProfile();
-
-          profileResult.fold(
-                (failure) => emit(LoginFailure("Profile setup failed: ${failure.message}")),
-                (profileMap) {
-              emit(LoginSuccess(auth));
-            },
-          );
-        },
+      final result = await repository.loginWithQR(token);
+      result.fold(
+            (failure) => emit(LoginFailure(failure.message)),
+            (auth) => emit(LoginSuccess(auth)),
       );
     });
   }

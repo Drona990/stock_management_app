@@ -3,10 +3,9 @@ import '../../../../core/error/failures.dart';
 import '../entities/user_entity.dart';
 
 abstract class AuthRepository {
-  Future<Either<Failure, AuthEntity>> switchUser(String targetUserId);
-  Future<Either<Failure, AuthEntity>> login(String login, String password);
-
-  Future<Either<Failure, Map<String, String>>> getUserProfile();
-
+  Future<Either<Failure, AuthEntity>> loginWithCredentials(String username, String password);
+  Future<Either<Failure, AuthEntity>> loginWithQR(String qrToken);
+  Future<Either<Failure, Map<String, dynamic>>> getEmployeeDashboardData();
   Future<void> updateFCMToken();
+  Future<void> logout();
 }
