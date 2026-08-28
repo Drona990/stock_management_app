@@ -1,3 +1,4 @@
+// domain/entities/user_entity.dart
 class AuthEntity {
   final String accessToken;
   final String refreshToken;
@@ -5,13 +6,13 @@ class AuthEntity {
   final String employeeId;
   final String empCode;
   final String fullName;
+  final String? profilePhoto; // 🌟 Add this
   final String department;
   final String designation;
-  final String shiftName;
   final String shiftCode;
+  final String shiftName;
   final String shiftStart;
   final String shiftEnd;
-  final int graceMinutes;
 
   AuthEntity({
     required this.accessToken,
@@ -20,12 +21,12 @@ class AuthEntity {
     required this.employeeId,
     required this.empCode,
     required this.fullName,
+    this.profilePhoto,
     required this.department,
     required this.designation,
-    required this.shiftName,
     required this.shiftCode,
+    required this.shiftName,
     required this.shiftStart,
     required this.shiftEnd,
-    required this.graceMinutes,
   });
 }

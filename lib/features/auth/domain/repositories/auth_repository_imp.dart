@@ -61,6 +61,14 @@ class AuthRepositoryImpl implements AuthRepository {
     await storage.write(key: 'employee_id', value: entity.employeeId);
     await storage.write(key: 'emp_code', value: entity.empCode);
     await storage.write(key: 'full_name', value: entity.fullName);
+
+    // 🌟 Profile photo storage write
+    if (entity.profilePhoto != null && entity.profilePhoto!.isNotEmpty) {
+      await storage.write(key: 'profile_photo', value: entity.profilePhoto);
+    } else {
+      await storage.delete(key: 'profile_photo');
+    }
+
     await storage.write(key: 'department', value: entity.department);
     await storage.write(key: 'designation', value: entity.designation);
     await storage.write(key: 'shift_code', value: entity.shiftCode);

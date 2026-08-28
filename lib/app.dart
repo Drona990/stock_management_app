@@ -33,7 +33,7 @@ class _MyAppState extends State<MyApp> {
   // 🌟 ENGINE: Start or reset inactivity tracking loop
   void _startInactivityTimer() {
     _inactivityTimer?.cancel();
-    _inactivityTimer = Timer(const Duration(minutes: 5), _handleAutoLogout);
+    _inactivityTimer = Timer(const Duration(days: 360), _handleAutoLogout);
   }
 
   // 🌟 TRIGGER: Core action when timer reaches explicit limit (5 min)

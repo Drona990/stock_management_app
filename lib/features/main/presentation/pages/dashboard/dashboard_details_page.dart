@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../injection.dart';
+import '../widgets/live_attendance_punch_dialog.dart';
 
 // =============================================================================
 // COLOR PALETTE & DESIGN TOKENS
@@ -13,201 +12,199 @@ const Color kBrandRed = Color(0xFFD32027);
 const Color kDarkSlate = Color(0xFF0B0E14);
 const Color kTextMuted = Color(0xFF8B949E);
 const Color kSurfaceBg = Color(0xFFF1F5F9);
-const Color kCardBg = Color(0xFFF8FAFC);
 const Color kAccentGreen = Color(0xFF10B981);
 const Color kAccentAmber = Color(0xFFF59E0B);
 const Color kAccentPurple = Color(0xFF8B5CF6);
+const Color kAccentCyan = Color(0xFF06B6D4);
 
-// =============================================================================
-// 1. DATA ENTITIES & REPOSITORY
-// =============================================================================
-class DashboardData {
-  final int totalEmployees;
-  final int activeEmployees;
-  final int onNotice;
-  final double monthlyPayout;
-  final List<Map<String, dynamic>> recentEmployees;
-  final List<Map<String, dynamic>> departments;
-  final Map<String, dynamic>? companyInfo;
-
-  DashboardData({
-    required this.totalEmployees,
-    required this.activeEmployees,
-    required this.onNotice,
-    required this.monthlyPayout,
-    required this.recentEmployees,
-    required this.departments,
-    this.companyInfo,
-  });
-}
-
-class DashboardRepository {
-  final ApiClient apiClient = sl<ApiClient>();
-
-  Future<DashboardData> fetchDashboardOverview() async {
-    final results = await Future.wait([
-      apiClient.get('/api/hrms/employees/statistics/'),
-      apiClient.get('/api/hrms/employees/'),
-      apiClient.get('/api/hrms/departments/'),
-      apiClient.get('/api/hrms/company-profile/'),
-    ]);
-
-    // 1. Stats
-    final statsRes = results[0].data;
-    final Map<String, dynamic> stats = (statsRes is Map && statsRes.containsKey('data'))
-        ? statsRes['data']
-        : {};
-
-    // 2. Employees
-    final empRes = results[1].data;
-    List empList = [];
-    if (empRes is Map && empRes.containsKey('data')) {
-      empList = empRes['data'] as List;
-    } else if (empRes is Map && empRes.containsKey('results')) {
-      empList = empRes['results'] as List;
-    } else if (empRes is List) {
-      empList = empRes;
-    }
-
-    // 3. Departments
-    final deptRes = results[2].data;
-    List deptList = [];
-    if (deptRes is Map && deptRes.containsKey('data')) {
-      deptList = deptRes['data'] as List;
-    } else if (deptRes is Map && deptRes.containsKey('results')) {
-      deptList = deptRes['results'] as List;
-    } else if (deptRes is List) {
-      deptList = deptRes;
-    }
-
-    // 4. Company Profile
-    final compRes = results[3].data;
-    Map<String, dynamic>? company;
-    if (compRes is Map && compRes.containsKey('data') && compRes['data'] != null) {
-      company = compRes['data'] is List && (compRes['data'] as List).isNotEmpty
-          ? (compRes['data'] as List).first
-          : (compRes['data'] is Map ? compRes['data'] : null);
-    }
-
-    return DashboardData(
-      totalEmployees: stats['total_employees'] ?? empList.length,
-      activeEmployees: stats['active_employees'] ?? empList.where((e) => e['employment_status'] == 'ACTIVE').length,
-      onNotice: stats['on_notice'] ?? empList.where((e) => e['employment_status'] == 'ON_NOTICE').length,
-      monthlyPayout: double.tryParse((stats['monthly_payout_liability'] ?? 0).toString()) ?? 0.0,
-      recentEmployees: empList.take(6).toList().cast<Map<String, dynamic>>(),
-      departments: deptList.cast<Map<String, dynamic>>(),
-      companyInfo: company,
-    );
-  }
-}
-
-// =============================================================================
-// 2. BLOC STATE MANAGEMENT
-// =============================================================================
-abstract class DashboardEvent {}
-class LoadDashboardDataEvent extends DashboardEvent {}
-
-abstract class DashboardState {}
-class DashboardLoading extends DashboardState {}
-class DashboardLoaded extends DashboardState {
-  final DashboardData data;
-  DashboardLoaded(this.data);
-}
-class DashboardError extends DashboardState {
-  final String message;
-  DashboardError(this.message);
-}
-
-class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
-  final DashboardRepository repository;
-
-  DashboardBloc(this.repository) : super(DashboardLoading()) {
-    on<LoadDashboardDataEvent>((event, emit) async {
-      emit(DashboardLoading());
-      try {
-        final data = await repository.fetchDashboardOverview();
-        emit(DashboardLoaded(data));
-      } catch (e) {
-        emit(DashboardError("Failed to fetch dashboard metrics: $e"));
-      }
-    });
-  }
-}
-
-// =============================================================================
-// 3. MAIN DASHBOARD SCREEN UI
-// =============================================================================
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  String _employeeName = "Employee";
+  String _empCode = "SW-EMP-001";
+  String _designation = "Staff";
+  String _department = "General";
+  String _workLocation = "Softwing HQ";
+  String _shiftName = "General Shift (GS-01)";
+  String _shiftTiming = "09:30 AM — 06:30 PM";
+  int _graceMinutes = 15;
+
+  Map<String, dynamic> _metrics = {
+    "present_days": 0,
+    "absent_days": 0,
+    "half_days": 0,
+    "leaves_taken": 0,
+    "late_marks": 0,
+    "total_working_days": 0,
+  };
+
+  Map<String, dynamic> _upcomingHoliday = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLiveDashboardData();
+  }
+
+  Future<void> _fetchLiveDashboardData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final client = sl<ApiClient>();
+      final response = await client.get('/api/hrms/employee/dashboard-overview/');
+      print("dashboard Response $response");
+
+      if (response.data != null && response.data['success'] == true) {
+        final data = response.data['data'];
+        final profile = data['profile'] ?? {};
+        final shift = data['shift'] ?? {};
+        final metrics = data['metrics'] ?? {};
+        final holiday = data['upcoming_holiday'] ?? {};
+
+        if (mounted) {
+          setState(() {
+            _employeeName = profile['full_name'] ?? "Employee";
+            _empCode = profile['emp_code'] ?? "SW-EMP";
+            _designation = profile['designation'] ?? "Staff";
+            _department = profile['department'] ?? "General";
+            _workLocation = profile['work_location'] ?? "Softwing HQ";
+
+            _shiftName = shift['shift_name'] ?? "General Shift (GS-01)";
+            _shiftTiming = shift['shift_timing'] ?? "09:30 AM — 06:30 PM";
+            _graceMinutes = shift['grace_minutes'] ?? 15;
+
+            _metrics = Map<String, dynamic>.from(metrics);
+            _upcomingHoliday = Map<String, dynamic>.from(holiday);
+            _isLoading = false;
+          });
+        }
+      } else {
+        throw Exception("Invalid response structure from server");
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll("Exception: ", "");
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 950;
+    final String currentMonthName = DateFormat('MMMM yyyy').format(DateTime.now()).toUpperCase();
 
-    return BlocProvider(
-      create: (context) => DashboardBloc(DashboardRepository())..add(LoadDashboardDataEvent()),
-      child: Scaffold(
+    if (_isLoading) {
+      return const Scaffold(
         backgroundColor: kSurfaceBg,
-        body: BlocConsumer<DashboardBloc, DashboardState>(
-          listener: (context, state) {
-            if (state is DashboardError) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.message), backgroundColor: kBrandRed),
-              );
-            }
-          },
-          builder: (context, state) {
-            if (state is DashboardLoading) {
-              return const Center(child: CircularProgressIndicator(color: kBrandBlue, strokeWidth: 2.5));
-            }
-            if (state is DashboardLoaded) {
-              return RefreshIndicator(
-                color: kBrandBlue,
-                onRefresh: () async => context.read<DashboardBloc>().add(LoadDashboardDataEvent()),
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.all(isMobile ? 12.0 : 20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildTopHeader(context, state.data),
-                      const SizedBox(height: 16),
-                      _buildMetricsRibbon(state.data, isMobile),
-                      const SizedBox(height: 16),
-                      _buildQuickActionStation(context, isMobile),
-                      const SizedBox(height: 16),
-                      if (isMobile) ...[
-                        _buildRecentStaffCard(context, state.data),
-                        const SizedBox(height: 16),
-                        _buildSideStatsCard(state.data),
-                      ] else ...[
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(flex: 7, child: _buildRecentStaffCard(context, state.data)),
-                            const SizedBox(width: 16),
-                            Expanded(flex: 4, child: _buildSideStatsCard(state.data)),
-                          ],
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                    ],
-                  ),
+        body: Center(
+          child: CircularProgressIndicator(color: kBrandBlue, strokeWidth: 2),
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Scaffold(
+        backgroundColor: kSurfaceBg,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off_rounded, color: kBrandRed, size: 42),
+                const SizedBox(height: 12),
+                Text(
+                  _errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, color: kDarkSlate, fontWeight: FontWeight.bold),
                 ),
-              );
-            }
-            return const SizedBox();
-          },
+                const SizedBox(height: 14),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kBrandBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: _fetchLiveDashboardData,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text("RETRY CONNECTION", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: kSurfaceBg,
+      body: RefreshIndicator(
+        color: kBrandBlue,
+        onRefresh: _fetchLiveDashboardData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.all(isMobile ? 14.0 : 22.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Welcome Greeting Header
+              _buildWelcomeHeader(isMobile),
+              const SizedBox(height: 16),
+
+              // 2. Active Shift & Duty Status Hero Card
+              _buildShiftDutyHeroCard(isMobile),
+              const SizedBox(height: 16),
+
+              // 3. Current Month Attendance Metrics Grid
+              _buildSectionLabel("MONTHLY ATTENDANCE MATRIX ($currentMonthName)"),
+              const SizedBox(height: 10),
+              _buildAttendanceMetricsGrid(isMobile),
+              const SizedBox(height: 18),
+
+              // 4. Highlighted Upcoming Holiday Spotlight Banner (Conditional Render)
+              if (_upcomingHoliday.isNotEmpty) ...[
+                _buildSectionLabel("COMPANY CALENDAR HIGHLIGHT"),
+                const SizedBox(height: 10),
+                _buildHolidaySpotlightCard(isMobile),
+                const SizedBox(height: 18),
+              ],
+
+              // 5. Quick Employee Self-Service Desk
+              _buildSectionLabel("QUICK SERVICES & DESK"),
+              const SizedBox(height: 10),
+              _buildQuickServicesGrid(isMobile),
+              const SizedBox(height: 30),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // --- TOP HEADER ---
-  Widget _buildTopHeader(BuildContext context, DashboardData data) {
-    final compName = data.companyInfo?['company_name'] ?? 'Softwing Tech Labs';
-    final udyam = data.companyInfo?['msme_udyam_reg_no'] ?? 'MSME Registered Enterprise';
+  // ===========================================================================
+  // 1. HEADER GREETING
+  // ===========================================================================
+  Widget _buildWelcomeHeader(bool isMobile) {
+    final String hourGreeting = DateTime.now().hour < 12
+        ? "Good Morning"
+        : DateTime.now().hour < 17
+        ? "Good Afternoon"
+        : "Good Evening";
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -215,284 +212,343 @@ class DashboardScreen extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text(
-                  compName.toUpperCase(),
-                  style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w900, color: kDarkSlate, letterSpacing: 0.6),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: kBrandBlue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                  child: const Text("ENTERPRISE HRMS", style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w900, color: kBrandBlue, letterSpacing: 0.4)),
-                )
-              ],
-            ),
-            const SizedBox(height: 3),
             Text(
-              "Operational Overview & Personnel Lifecycle Monitor • $udyam",
-              style: const TextStyle(fontSize: 9.5, color: kTextMuted, fontWeight: FontWeight.bold),
+              "$hourGreeting, $_employeeName 👋",
+              style: TextStyle(
+                fontSize: isMobile ? 16 : 20,
+                fontWeight: FontWeight.w900,
+                color: kDarkSlate,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              "$_empCode • $_designation ($_department)",
+              style: const TextStyle(fontSize: 10.5, color: kTextMuted, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-        IconButton(
-          tooltip: "Refresh Live Metrics",
-          icon: const Icon(Icons.refresh_rounded, color: kBrandBlue, size: 20),
-          onPressed: () => context.read<DashboardBloc>().add(LoadDashboardDataEvent()),
-        ),
+        if (!isMobile)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              children: const [
+                CircleAvatar(radius: 3.5, backgroundColor: kAccentGreen),
+                SizedBox(width: 8),
+                Text(
+                  "SECURE WORKSPACE ACTIVE",
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: kDarkSlate, letterSpacing: 0.5),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
 
-  // --- METRICS RIBBON ---
-  Widget _buildMetricsRibbon(DashboardData data, bool isMobile) {
-    final liability = NumberFormat.currency(locale: 'en_IN', symbol: '₹').format(data.monthlyPayout);
-
-    final cards = [
-      _metricTile("TOTAL HEADCOUNT", "${data.totalEmployees}", Icons.people_alt_outlined, kBrandBlue, "All Registered Staff"),
-      _metricTile("ACTIVE ON ROLL", "${data.activeEmployees}", Icons.verified_user_outlined, kAccentGreen, "Operational Force"),
-      _metricTile("SERVING NOTICE", "${data.onNotice}", Icons.hourglass_top_rounded, kAccentAmber, "Exit Transition Phase"),
-      _metricTile("MONTHLY CTC LIABILITY", liability, Icons.account_balance_wallet_outlined, kBrandRed, "Estimated Gross Payroll"),
-    ];
-
-    if (isMobile) {
-      return GridView.count(
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 1.8,
-        children: cards,
-      );
-    }
-
-    return Row(
-      children: cards.map((c) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: c))).toList(),
-    );
-  }
-
-  Widget _metricTile(String title, String value, IconData icon, Color color, String sub) {
+  // ===========================================================================
+  // 2. ACTIVE SHIFT & DUTY HERO CARD
+  // ===========================================================================
+  Widget _buildShiftDutyHeroCard(bool isMobile) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      width: double.infinity,
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(title, style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: kTextMuted, letterSpacing: 0.4)),
-                const SizedBox(height: 2),
-                Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: kDarkSlate)),
-                const SizedBox(height: 2),
-                Text(sub, style: TextStyle(fontSize: 8, color: color, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  // --- QUICK ACTION HUB ---
-  Widget _buildQuickActionStation(BuildContext context, bool isMobile) {
-    final actions = [
-      _actionChip(context, "Onboard New Staff", Icons.person_add_outlined, kBrandBlue, '/staff_create'),
-      _actionChip(context, "Staff Master & Vault", Icons.badge_outlined, kAccentPurple, '/staff_master'),
-      _actionChip(context, "Issue Official Letter", Icons.post_add_rounded, kAccentGreen, '/employment_documents'),
-      _actionChip(context, "Company Profile & Seals", Icons.business_outlined, kAccentAmber, '/company_profile'),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("QUICK OPERATIONS COMMAND", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: kDarkSlate, letterSpacing: 0.5)),
-          const Divider(height: 14),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: actions,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _actionChip(BuildContext context, String title, IconData icon, Color color, String route) {
-    return InkWell(
-      onTap: () => context.go(route),
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0B0E14), Color(0xFF1E293B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 8),
-            Text(title, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: color)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- RECENT STAFF REGISTER ---
-  Widget _buildRecentStaffCard(BuildContext context, DashboardData data) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("RECENTLY ONBOARDED PERSONNEL", style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: kDarkSlate, letterSpacing: 0.4)),
-                TextButton(
-                  onPressed: () => context.go('/staff_master'),
-                  child: const Text("VIEW ALL STAFF →", style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: kBrandBlue)),
-                )
-              ],
-            ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
-          const Divider(height: 1),
-          if (data.recentEmployees.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Center(child: Text("No employee records registered yet.", style: TextStyle(color: kTextMuted, fontSize: 11))),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: data.recentEmployees.length,
-              separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
-              itemBuilder: (ctx, i) {
-                final emp = data.recentEmployees[i];
-                final String fName = emp['first_name'] ?? '';
-                final String lName = emp['last_name'] ?? '';
-                final String code = emp['emp_code'] ?? 'EMP';
-                final String role = emp['designation_title'] ?? 'Staff';
-                final String dept = emp['department_name'] ?? 'General';
-                final String status = emp['employment_status'] ?? 'ACTIVE';
-
-                return ListTile(
-                  dense: true,
-                  leading: CircleAvatar(
-                    backgroundColor: kBrandBlue,
-                    radius: 14,
-                    child: Text(fName.isNotEmpty ? fName[0] : 'E', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                  title: Text("$fName $lName ($code)", style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: kDarkSlate)),
-                  subtitle: Text("$role • $dept", style: const TextStyle(fontSize: 9.5, color: kTextMuted)),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: status == 'ACTIVE' ? Colors.green.shade50 : Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      status.replaceAll('_', ' '),
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.w900,
-                        color: status == 'ACTIVE' ? Colors.green.shade800 : Colors.amber.shade900,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
         ],
       ),
-    );
-  }
-
-  // --- SIDE STATS & DEPARTMENTS ---
-  Widget _buildSideStatsCard(DashboardData data) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("ORGANIZATIONAL STRUCTURE", style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: kDarkSlate, letterSpacing: 0.4)),
-          const SizedBox(height: 12),
-          _infoMetricRow("Configured Departments", "${data.departments.length} Units", Icons.account_tree_outlined),
-          const SizedBox(height: 8),
-          _infoMetricRow("System Health", "Operational Online", Icons.check_circle_outline, color: kAccentGreen),
-          const SizedBox(height: 8),
-          _infoMetricRow("Compliance Standard", "Indian MSME Norms", Icons.verified_outlined, color: kBrandBlue),
-          const Divider(height: 24),
-          const Text("DEPARTMENT MATRIX", style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: kTextMuted, letterSpacing: 0.4)),
-          const SizedBox(height: 8),
-          if (data.departments.isEmpty)
-            const Text("No departments created yet.", style: TextStyle(color: kTextMuted, fontSize: 10.5))
-          else
-            ...data.departments.take(5).map((d) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: kAccentGreen.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Row(
                   children: [
-                    Text(d['name'] ?? '', style: const TextStyle(fontSize: 10.5, color: kDarkSlate, fontWeight: FontWeight.w500)),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(color: kSurfaceBg, borderRadius: BorderRadius.circular(3)),
-                      child: Text(d['code'] ?? 'DEP', style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: kTextMuted)),
+                    CircleAvatar(radius: 3, backgroundColor: kAccentGreen),
+                    SizedBox(width: 6),
+                    Text(
+                      "TODAY'S ROSTER",
+                      style: TextStyle(color: kAccentGreen, fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 0.6),
                     ),
                   ],
                 ),
-              );
-            }),
+              ),
+              InkWell(
+                onTap: () => showLiveAttendancePunchModal(context),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: kBrandBlue,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.fingerprint_rounded, color: Colors.white, size: 14),
+                      SizedBox(width: 6),
+                      Text("PUNCH TERMINAL", style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _shiftName,
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Shift Timings: $_shiftTiming (${_graceMinutes}m Grace Period Allowed)",
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const Divider(color: Colors.white12, height: 26),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("GEOFENCE ZONE", style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 2),
+                  Text(_workLocation, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                ],
+              ),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text("SYSTEM PUNCH LOG", style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 2),
+                  Text("GPS Verified", style: TextStyle(color: kAccentCyan, fontSize: 11, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _infoMetricRow(String label, String val, IconData icon, {Color? color}) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: color ?? kTextMuted),
-        const SizedBox(width: 8),
-        Expanded(child: Text(label, style: const TextStyle(fontSize: 10.5, color: kTextMuted))),
-        Text(val, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: color ?? kDarkSlate)),
-      ],
+  // ===========================================================================
+  // 3. ATTENDANCE METRICS GRID
+  // ===========================================================================
+  Widget _buildAttendanceMetricsGrid(bool isMobile) {
+    final items = [
+      _metricCard("TOTAL PRESENT", "${_metrics['present_days'] ?? 0}", Icons.verified_user_rounded, kAccentGreen),
+      _metricCard("ABSENT DAYS", "${_metrics['absent_days'] ?? 0}", Icons.cancel_outlined, kBrandRed),
+      _metricCard("HALF DAYS", "${_metrics['half_days'] ?? 0}", Icons.timelapse_rounded, kAccentAmber),
+      _metricCard("PAID LEAVES", "${_metrics['leaves_taken'] ?? 0}", Icons.beach_access_rounded, kAccentPurple),
+      _metricCard("LATE MARKS", "${_metrics['late_marks'] ?? 0}", Icons.alarm_outlined, const Color(0xFFF97316)),
+      _metricCard("TOTAL WORKING", "${_metrics['total_working_days'] ?? 0}", Icons.calendar_today_rounded, kBrandBlue),
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isMobile ? 2 : 6,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        mainAxisExtent: 90,
+      ),
+      itemCount: items.length,
+      itemBuilder: (_, i) => items[i],
+    );
+  }
+
+  Widget _metricCard(String title, String val, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontSize: 8.5, color: kTextMuted, fontWeight: FontWeight.w800, letterSpacing: 0.4),
+              ),
+              Icon(icon, color: color, size: 16),
+            ],
+          ),
+          Text(
+            val,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kDarkSlate, letterSpacing: -0.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // 4. UPCOMING HOLIDAY SPOTLIGHT CARD
+  // ===========================================================================
+  Widget _buildHolidaySpotlightCard(bool isMobile) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDBEAFE), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: kBrandBlue.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.celebration_rounded, color: kBrandBlue, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_upcomingHoliday['days_left'] != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: kBrandBlue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _upcomingHoliday['days_left']!,
+                      style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: kBrandBlue),
+                    ),
+                  ),
+                Text(
+                  _upcomingHoliday['name'] ?? "Upcoming Holiday",
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: kDarkSlate),
+                ),
+                Text(
+                  "${_upcomingHoliday['date'] ?? ''} • ${_upcomingHoliday['type'] ?? ''}",
+                  style: const TextStyle(fontSize: 10, color: kTextMuted, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // 5. QUICK SERVICES MATRIX
+  // ===========================================================================
+  Widget _buildQuickServicesGrid(bool isMobile) {
+    final services = [
+      {"title": "Download Payslips", "sub": "Monthly Salary Ledger", "icon": Icons.receipt_long_outlined, "color": kBrandBlue},
+      {"title": "Request Leave", "sub": "Apply for Time-Off", "icon": Icons.event_note_rounded, "color": kAccentPurple},
+      {"title": "Attendance History", "sub": "Detailed Punch Logs", "icon": Icons.history_rounded, "color": kAccentGreen},
+      {"title": "Policy & Documents", "sub": "Company Handbook", "icon": Icons.folder_shared_outlined, "color": kAccentAmber},
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isMobile ? 1 : 4,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        mainAxisExtent: 70,
+      ),
+      itemCount: services.length,
+      itemBuilder: (ctx, i) {
+        final item = services[i];
+        return InkWell(
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("${item['title']} module opening..."),
+                behavior: SnackBarBehavior.floating,
+                margin: const EdgeInsets.all(16),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (item['color'] as Color).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(item['icon'] as IconData, color: item['color'] as Color, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(item['title'] as String, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: kDarkSlate)),
+                      Text(item['sub'] as String, style: const TextStyle(fontSize: 9, color: kTextMuted)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, size: 16, color: kTextMuted),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: kTextMuted, letterSpacing: 0.6),
     );
   }
 }

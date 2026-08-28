@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../../../../core/utils/websocket/websocket_service.dart';
-import '../../../../../injection.dart';
+
+import '../widgets/employee_avatar.dart';
+import '../widgets/live_attendance_punch_dialog.dart';
 
 class MainDashboard extends StatefulWidget {
   final Widget child;
@@ -16,534 +16,419 @@ class MainDashboard extends StatefulWidget {
 }
 
 class _MainDashboardState extends State<MainDashboard> with SingleTickerProviderStateMixin {
-  // --- Softwing Tech Labs Theme Palette ---
+  // Corporate Palette
   static const Color brandBlue = Color(0xFF0066B3);
-  static const Color brandRed = Color(0xFFD32027);
-  static const Color darkSidebarBg = Color(0xFF0B0E14);
-  static const Color sidebarHoverColor = Color(0xFF141923);
+  static const Color accentCyan = Color(0xFF0284C7);
+  static const Color deepNavy = Color(0xFF0F172A);
+  static const Color surfaceBg = Color(0xFFF8FAFC);
   static const Color textMuted = Color(0xFF8B949E);
+  static const Color roseRed = Color(0xFFF43F5E);
 
-  final storage = const FlutterSecureStorage();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  late AnimationController _pulseController;
 
-  String _userName = "User";
-  String _userRole = "staff";
-  String _initials = "U";
+  String _userName = "Employee";
+  String _empCode = "EMP-001";
+  String _designation = "Staff";
+  String _initials = "E";
   bool _isReady = false;
-
-  Set<String> _userAllowedRoutes = {};
-
-  final Map<String, bool> _expandedGroups = {
-    "Staff Directory": false,
-    "Payroll & Slips": false,
-    "Documentation": false,
-    "Attendance & Leaves": false,
-    "Commercial Master": false,
-    "Transactions": false,
-    "Reports Center": false,
-  };
-
-  bool _isSidebarManualCollapsed = false;
+  String? _profilePhotoUrl;
 
   @override
   void initState() {
     super.initState();
-    _initializeRoleAndSockets();
-  }
-
-  Future<void> _initializeRoleAndSockets() async {
-    try {
-      final role = await storage.read(key: 'user_role') ?? "staff";
-      final name = await storage.read(key: 'username') ?? "User";
-
-      final rawRoutes = await storage.read(key: 'user_allowed_routes');
-      Set<String> allowed = {'/dashboard'};
-
-      if (rawRoutes != null) {
-        final List<dynamic> parsed = jsonDecode(rawRoutes);
-        allowed = parsed.cast<String>().toSet();
-      }
-
-      if (mounted) {
-        setState(() {
-          _userRole = role.toLowerCase().trim();
-          _userName = name;
-          _initials = name.isNotEmpty ? name[0].toUpperCase() : "U";
-          _userAllowedRoutes = allowed;
-          _isReady = true;
-        });
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          sl<WebSocketService>().initCentralGateway();
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isReady = true);
-    }
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _loadEmployeeIdentity();
   }
 
   @override
   void dispose() {
-    sl<WebSocketService>().closeGateway();
+    _pulseController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadEmployeeIdentity() async {
+    try {
+      final name = await _storage.read(key: 'full_name') ?? await _storage.read(key: 'username') ?? "Employee";
+      final code = await _storage.read(key: 'emp_code') ?? "SW-EMP";
+      final desig = await _storage.read(key: 'designation') ?? "Team Member";
+      final photo = await _storage.read(key: 'profile_photo'); // 🌟 Read photo URL
+
+      if (mounted) {
+        setState(() {
+          _userName = name;
+          _empCode = code;
+          _designation = desig;
+          _profilePhotoUrl = photo;
+          _initials = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : "E";
+          _isReady = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isReady = true);
+    }
+  }
+
+  int _calculateSelectedIndex(BuildContext context) {
+    final location = GoRouterState.of(context).uri.path;
+    if (location.startsWith('/attendance')) return 1;
+    if (location.startsWith('/calendar')) return 2;
+    if (location.startsWith('/profile')) return 3;
+    return 0;
+  }
+
+  void _onItemTapped(int index) {
+    switch (index) {
+      case 0:
+        context.go('/dashboard');
+        break;
+      case 1:
+        context.go('/attendance');
+        break;
+      case 2:
+        context.go('/calendar');
+        break;
+      case 3:
+        context.go('/profile');
+        break;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (!_isReady) {
       return const Scaffold(
-        backgroundColor: darkSidebarBg,
-        body: Center(
-          child: CircularProgressIndicator(color: brandBlue, strokeWidth: 2),
-        ),
+        backgroundColor: deepNavy,
+        body: Center(child: CircularProgressIndicator(color: accentCyan, strokeWidth: 2)),
       );
     }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final bool isMobile = constraints.maxWidth < 600;
-        final bool isTablet = constraints.maxWidth >= 600 && constraints.maxWidth < 1024;
-        final bool shouldCollapseSidebar = _isSidebarManualCollapsed || isTablet;
+        final bool isDesktop = constraints.maxWidth >= 950;
+        final int activeIndex = _calculateSelectedIndex(context);
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF1F5F9),
-          appBar: _buildProfessionalAppBar(isMobile, shouldCollapseSidebar),
-          drawer: isMobile ? Drawer(child: _buildSidebarContent(false, isMobile)) : null,
+          backgroundColor: surfaceBg,
+          appBar: _buildTopBar(isDesktop),
           body: Row(
             children: [
-              if (!isMobile)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeInOut,
-                  width: shouldCollapseSidebar ? 68 : 250,
-                  color: darkSidebarBg,
-                  child: _buildSidebarContent(shouldCollapseSidebar, isMobile),
-                ),
+              // Desktop Lateral Side Rail
+              if (isDesktop) _buildDesktopSideRail(activeIndex),
               Expanded(
-                child: Column(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: isDesktop ? 1200 : double.infinity),
+                    child: widget.child,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Mobile & Tablet PhonePe-Style Floating Center FAB
+          floatingActionButtonLocation: isDesktop ? null : FloatingActionButtonLocation.centerDocked,
+          floatingActionButton: isDesktop ? null : _buildCenterPulsePunchButton(),
+          // Mobile & Tablet Bottom Navigation Dock
+          bottomNavigationBar: isDesktop ? null : _buildBottomNavigationDock(activeIndex),
+        );
+      },
+    );
+  }
+
+  // ===========================================================================
+  // 1. TOP BAR
+  // ===========================================================================
+  PreferredSizeWidget _buildTopBar(bool isDesktop) {
+    return AppBar(
+      elevation: 0,
+      backgroundColor: Colors.white,
+      toolbarHeight: 56,
+      titleSpacing: isDesktop ? 24 : 16,
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: brandBlue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.badge_outlined, color: brandBlue, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "SOFTWING WORKFORCE",
+                style: TextStyle(
+                  color: deepNavy,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12.5,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              Text(
+                DateFormat('EEEE, dd MMM yyyy').format(DateTime.now()).toUpperCase(),
+                style: const TextStyle(color: textMuted, fontSize: 8.5, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        if (isDesktop)
+          ElevatedButton.icon(
+            onPressed: () => showLiveAttendancePunchModal(context),
+            icon: const Icon(Icons.fingerprint_rounded, size: 16),
+            label: const Text("PUNCH DUTY", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: brandBlue,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        const SizedBox(width: 12),
+        _buildUserAvatar(isDesktop),
+        const SizedBox(width: 16),
+      ],
+      shape: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
+    );
+  }
+
+  Widget _buildUserAvatar(bool isDesktop) {
+    return Row(
+      children: [
+        if (isDesktop) ...[
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _userName,
+                style: const TextStyle(color: deepNavy, fontWeight: FontWeight.bold, fontSize: 11.5),
+              ),
+              Text(
+                "$_empCode • $_designation",
+                style: const TextStyle(color: textMuted, fontSize: 9, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(width: 10),
+        ],
+        EmployeeAvatar(
+          photoUrl: _profilePhotoUrl,
+          initials: _initials,
+          radius: 17,
+        ),
+      ],
+    );
+  }
+  // ===========================================================================
+  // 2. DESKTOP SIDE RAIL NAVIGATION
+  // ===========================================================================
+  Widget _buildDesktopSideRail(int activeIndex) {
+    return Container(
+      width: 220,
+      decoration: BoxDecoration(
+        color: deepNavy,
+        border: Border(right: BorderSide(color: Colors.grey.shade800, width: 0.5)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          _navSideItem(0, Icons.dashboard_rounded, "Dashboard", activeIndex == 0),
+          _navSideItem(1, Icons.history_toggle_off_rounded, "Attendance", activeIndex == 1),
+          _navSideItem(2, Icons.event_available_rounded, "Holiday Calendar", activeIndex == 2),
+          _navSideItem(3, Icons.person_rounded, "My Profile", activeIndex == 3),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: InkWell(
+              onTap: _executeSignOut,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: roseRed.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
                   children: [
-                    Expanded(
-                      child: ClipRRect(
-                        child: widget.child,
+                    Icon(Icons.logout_rounded, color: roseRed, size: 16),
+                    SizedBox(width: 10),
+                    Text(
+                      "SIGN OUT",
+                      style: TextStyle(color: roseRed, fontSize: 10.5, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _navSideItem(int index, IconData icon, String label, bool isSelected) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      child: InkWell(
+        onTap: () => _onItemTapped(index),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? brandBlue : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: isSelected ? Colors.white : textMuted),
+              const SizedBox(width: 12),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.white70,
+                  fontSize: 11.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // 3. MOBILE & TABLET PHONEPE-STYLE PULSE PUNCH BUTTON
+  // ===========================================================================
+  Widget _buildCenterPulsePunchButton() {
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, child) {
+        return Container(
+          height: 64,
+          width: 64,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: brandBlue.withOpacity(0.25 + (_pulseController.value * 0.25)),
+                blurRadius: 16 + (_pulseController.value * 10),
+                spreadRadius: 2 + (_pulseController.value * 3),
+              ),
+            ],
+          ),
+          child: FloatingActionButton(
+            onPressed: () => showLiveAttendancePunchModal(context),
+            backgroundColor: brandBlue,
+            elevation: 4,
+            shape: const CircleBorder(),
+            child: Container(
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Color(0xFF0284C7), Color(0xFF0066B3)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.fingerprint_rounded, color: Colors.white, size: 26),
+                    Text(
+                      "PUNCH",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
         );
       },
     );
   }
 
-  // ==========================================================================
-  // 🏢 PROFESSIONAL HIGH-DENSITY TOP BAR
-  // ==========================================================================
-  PreferredSizeWidget _buildProfessionalAppBar(bool isMobile, bool isCollapsed) {
-    return AppBar(
-      elevation: 0,
-      backgroundColor: Colors.white,
-      toolbarHeight: 58,
-      iconTheme: const IconThemeData(color: darkSidebarBg, size: 20),
-      leading: isMobile
-          ? null
-          : IconButton(
-        icon: Icon(
-          isCollapsed ? Icons.menu_open_rounded : Icons.menu_rounded,
-          color: darkSidebarBg,
-        ),
-        onPressed: () => setState(() => _isSidebarManualCollapsed = !_isSidebarManualCollapsed),
-      ),
-      titleSpacing: isMobile ? 0 : 8,
-      title: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Image.asset(
-              'assets/icons/logo.png',
-              width: 26,
-              height: 26,
-              fit: BoxFit.contain,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isMobile ? "SOFTWING HRMS" : "SOFTWING TECH LABS • HRMS CORE",
-                style: const TextStyle(
-                  color: darkSidebarBg,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12.5,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                DateFormat('EEEE, dd MMMM yyyy').format(DateTime.now()).toUpperCase(),
-                style: TextStyle(
-                  color: Colors.grey.shade500,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ],
+  // ===========================================================================
+  // 4. MOBILE & TABLET BOTTOM DOCK
+  // ===========================================================================
+  Widget _buildBottomNavigationDock(int activeIndex) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 14,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
-      actions: [_buildUserIdentity(isMobile)],
-      shape: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
-    );
-  }
-
-  Widget _buildUserIdentity(bool isMobile) {
-    return Padding(
-      padding: EdgeInsets.only(right: isMobile ? 12 : 20),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!isMobile) ...[
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
+      child: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8.0,
+        color: Colors.white,
+        elevation: 0,
+        height: 62,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
               children: [
-                Text(
-                  _userName.toUpperCase(),
-                  style: const TextStyle(
-                    color: darkSidebarBg,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: brandBlue.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    _userRole.toUpperCase(),
-                    style: const TextStyle(
-                      color: brandBlue,
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-                ),
+                _dockItem(0, Icons.grid_view_rounded, Icons.grid_view_outlined, "Home", activeIndex == 0),
+                _dockItem(1, Icons.history_toggle_off_rounded, Icons.history_rounded, "Logs", activeIndex == 1),
               ],
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 48), // Gap for Punch FAB
+            Row(
+              children: [
+                _dockItem(2, Icons.event_available_rounded, Icons.event_outlined, "Holiday", activeIndex == 2),
+                _dockItem(3, Icons.person_rounded, Icons.person_outline_rounded, "Profile", activeIndex == 3),
+              ],
+            ),
           ],
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: brandBlue,
-            child: Text(
-              _initials,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  // ==========================================================================
-  // 🧭 SIDEBAR NAVIGATION ARCHITECTURE
-  // ==========================================================================
-  Widget _buildSidebarContent(bool isCollapsed, bool isMobile) {
-    return Column(
-      children: [
-        if (!isMobile && !isCollapsed) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-            alignment: Alignment.centerLeft,
-            child: Row(
-              children: const [
-                Icon(Icons.dashboard_customize_outlined, size: 16, color: brandBlue),
-                SizedBox(width: 10),
-                Text(
-                  "PORTAL NAVIGATION",
-                  style: TextStyle(
-                    color: textMuted,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ] else if (isCollapsed) ...[
-          const SizedBox(height: 16),
-        ],
-
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            physics: const ClampingScrollPhysics(),
-            children: [
-              if (_userRole == 'superuser' || _userAllowedRoutes.contains("/dashboard"))
-                _buildRawNavItem(Icons.dashboard_outlined, "Overview", "/dashboard", isCollapsed),
-              const SizedBox(height: 4),
-
-              // 1. HRMS CORE MODULES
-              _buildDynamicGroupMenu(
-                icon: Icons.people_alt_outlined,
-                label: "Staff Directory",
-                isCollapsed: isCollapsed,
-                children: [
-                  {"title": "Designations & Roles", "route": "/roles_master"},
-                  {"title": "Add New Employee", "route": "/staff_create"},
-                  {"title": "Staff Records", "route": "/staff_master"},
-                  {"title": "Issue Employees Documents ", "route": "/employment_documents"},
-                ],
-              ),
-              const SizedBox(height: 4),
-
-              _buildDynamicGroupMenu(
-                icon: Icons.receipt_long_outlined,
-                label: "Payroll & Slips",
-                isCollapsed: isCollapsed,
-                children: [
-                  {"title": "Generate Salary Slip", "route": "/"},
-                  {"title": "Salary History", "route": "/"},
-                  {"title": "Bank Payout Report", "route": "/"},
-                ],
-              ),
-              const SizedBox(height: 4),
-
-              if (_userRole == 'superuser') ...[
-                _buildCompactGroupMenu(
-                  icon: Icons.admin_panel_settings_outlined,
-                  label: "Admin Controls",
-                  isCollapsed: isCollapsed,
-                  children: [
-                    {"title": "Company Profile", "route": "/company_profile"},
-                    {"title": "Manage Users", "route": "/manage_user"},
-                    {"title": "Manage Attendance", "route": "/attendance_master"},
-                    {"title": "Device Sessions", "route": "/manage_session"},
-                    {"title": "Route Permissions", "route": "/manage_permission"},
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-
-        // Bottom Sign Out Control
-        Container(
-          padding: const EdgeInsets.all(8),
-          color: const Color(0xFF07090D),
-          child: _buildLogoutButton(isCollapsed),
-        ),
-      ],
-    );
-  }
-
-  // ==========================================================================
-  // ⚡ DYNAMIC PERMISSION WRAPPER HELPER
-  // ==========================================================================
-  Widget _buildDynamicGroupMenu({
-    required IconData icon,
-    required String label,
-    required bool isCollapsed,
-    required List<Map<String, String>> children,
-  }) {
-    final accessibleChildren = _userRole == 'superuser'
-        ? children
-        : children.where((child) => _userAllowedRoutes.contains(child["route"])).toList();
-
-    if (accessibleChildren.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return _buildCompactGroupMenu(
-      icon: icon,
-      label: label,
-      isCollapsed: isCollapsed,
-      children: accessibleChildren,
-    );
-  }
-
-  // ==========================================================================
-  // ⚡ CORE INTERFACE HELPER GENERATORS
-  // ==========================================================================
-  Widget _buildCompactGroupMenu({
-    required IconData icon,
-    required String label,
-    required bool isCollapsed,
-    required List<Map<String, String>> children,
-  }) {
-    final currentPath = GoRouterState.of(context).uri.path;
-    final bool hasActiveChild = children.any((element) => element["route"] == currentPath);
-    final bool isGroupOpen = _expandedGroups[label] ?? false;
-
-    if (isCollapsed) {
-      return PopupMenuButton<String>(
-        tooltip: label,
-        offset: const Offset(55, 0),
-        color: const Color(0xFF141923),
-        style: IconButton.styleFrom(
-          backgroundColor: hasActiveChild ? brandBlue.withOpacity(0.18) : Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        ),
-        onSelected: (route) => context.go(route),
-        icon: Icon(icon, size: 18, color: hasActiveChild ? brandBlue : textMuted),
-        itemBuilder: (BuildContext context) {
-          return children.map((item) {
-            final bool isSubSelected = item["route"] == currentPath;
-            return PopupMenuItem<String>(
-              value: item["route"],
-              height: 36,
-              child: Text(
-                item["title"]!,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: isSubSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSubSelected ? brandBlue : Colors.white70,
-                ),
-              ),
-            );
-          }).toList();
-        },
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        InkWell(
-          onTap: () => setState(() => _expandedGroups[label] = !isGroupOpen),
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              color: hasActiveChild ? brandBlue.withOpacity(0.12) : Colors.transparent,
-            ),
-            child: Row(
-              children: [
-                Icon(icon, size: 16, color: hasActiveChild ? brandBlue : textMuted),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: hasActiveChild ? Colors.white : const Color(0xFFCBD5E1),
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-                Icon(
-                  isGroupOpen ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                  size: 15,
-                  color: textMuted,
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (isGroupOpen)
-          Padding(
-            padding: const EdgeInsets.only(top: 2, bottom: 4),
-            child: Column(
-              children: children.map((item) {
-                final bool isSubSelected = item["route"] == currentPath;
-                return InkWell(
-                  onTap: () => context.go(item["route"]!),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    margin: const EdgeInsets.only(left: 14, top: 2, bottom: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7.5),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(6),
-                      color: isSubSelected ? brandBlue : Colors.transparent,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 4,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isSubSelected ? Colors.white : textMuted,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            item["title"]!,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: isSubSelected ? FontWeight.bold : FontWeight.w500,
-                              color: isSubSelected ? Colors.white : textMuted,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildRawNavItem(IconData icon, String label, String path, bool isCollapsed) {
-    final bool isSelected = GoRouterState.of(context).uri.path == path;
-
-    if (isCollapsed) {
-      return Tooltip(
-        message: label,
-        child: InkWell(
-          onTap: () => context.go(path),
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              color: isSelected ? brandBlue : Colors.transparent,
-            ),
-            child: Icon(icon, size: 18, color: isSelected ? Colors.white : textMuted),
-          ),
-        ),
-      );
-    }
-
+  Widget _dockItem(int index, IconData activeIcon, IconData idleIcon, String label, bool isSelected) {
     return InkWell(
-      onTap: () => context.go(path),
+      onTap: () => _onItemTapped(index),
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: isSelected ? brandBlue : Colors.transparent,
-        ),
-        child: Row(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: isSelected ? Colors.white : textMuted),
-            const SizedBox(width: 12),
+            Icon(
+              isSelected ? activeIcon : idleIcon,
+              color: isSelected ? brandBlue : textMuted,
+              size: 21,
+            ),
+            const SizedBox(height: 3),
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
-                letterSpacing: 0.2,
+                fontSize: 9.5,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? brandBlue : textMuted,
               ),
             ),
           ],
@@ -552,48 +437,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
-  Widget _buildLogoutButton(bool isCollapsed) {
-    if (isCollapsed) {
-      return Tooltip(
-        message: "Sign Out",
-        child: IconButton(
-          icon: const Icon(Icons.logout_rounded, color: brandRed, size: 17),
-          onPressed: _executeSignOutPipeline,
-        ),
-      );
-    }
-
-    return InkWell(
-      onTap: _executeSignOutPipeline,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          color: brandRed.withOpacity(0.1),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.logout_rounded, color: brandRed, size: 15),
-            SizedBox(width: 10),
-            Text(
-              "SIGN OUT PLATFORM",
-              style: TextStyle(
-                color: brandRed,
-                fontWeight: FontWeight.bold,
-                fontSize: 10,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _executeSignOutPipeline() async {
-    sl<WebSocketService>().closeGateway();
-    await storage.deleteAll();
+  Future<void> _executeSignOut() async {
+    await _storage.deleteAll();
     if (mounted) context.go('/login');
   }
 }

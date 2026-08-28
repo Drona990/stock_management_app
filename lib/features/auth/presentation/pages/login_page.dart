@@ -17,25 +17,44 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   final _formKey = GlobalKey<FormState>();
   final _loginController = TextEditingController();
   final _passwordController = TextEditingController();
-  final MobileScannerController _scannerController = MobileScannerController();
+  late MobileScannerController _scannerController;
+
   bool _isPasswordVisible = false;
   bool _isScanningLocked = false;
 
-  // Theme Colors
+  // Corporate Dark Design Tokens
   static const Color brandBlue = Color(0xFF0066B3);
   static const Color brandCyan = Color(0xFF06B6D4);
   static const Color deepCarbon = Color(0xFF0F172A);
   static const Color surfaceDark = Color(0xFF1E293B);
   static const Color textMuted = Color(0xFF8B949E);
+  static const Color alertRed = Color(0xFFEF4444);
 
   @override
   void initState() {
     super.initState();
+    _scannerController = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      facing: CameraFacing.back,
+    );
+
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabChange);
+  }
+
+  void _handleTabChange() {
+    if (_tabController.indexIsChanging) return;
+    if (_tabController.index == 0) {
+      _isScanningLocked = false;
+      _scannerController.start();
+    } else {
+      _scannerController.stop();
+    }
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _loginController.dispose();
     _passwordController.dispose();
@@ -43,23 +62,32 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     super.dispose();
   }
 
-  void _onDetectBarcode(BarcodeCapture capture) {
+  // Camera Barcode Scanning Handler with Race-Condition Guard
+  void _onDetectBarcode(BarcodeCapture capture) async {
     if (_isScanningLocked) return;
+
     final barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
     final String? raw = barcodes.first.rawValue;
-    if (raw != null && raw.isNotEmpty) {
-      setState(() => _isScanningLocked = true);
-      context.read<LoginBloc>().add(LoginWithQRSubmitted(raw));
+    if (raw != null && raw.trim().isNotEmpty) {
+      // 1. Lock immediately to stop multiple frames
+      _isScanningLocked = true;
+
+      // 2. Stop camera stream
+      try {
+        await _scannerController.stop();
+      } catch (_) {}
+
+      if (!mounted) return;
+
+      // 3. Dispatch to BLoC
+      context.read<LoginBloc>().add(LoginWithQRSubmitted(raw.trim()));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isDesktop = size.width > 950;
-
     return Scaffold(
       backgroundColor: deepCarbon,
       body: BlocConsumer<LoginBloc, LoginState>(
@@ -67,13 +95,22 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
           if (state is LoginSuccess) {
             context.go('/dashboard');
           } else if (state is LoginFailure) {
+            // Unlock scanner and resume camera on failure
             setState(() => _isScanningLocked = false);
+            if (_tabController.index == 0) {
+              _scannerController.start();
+            }
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(state.error, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                backgroundColor: Colors.redAccent,
+                content: Text(
+                  state.error,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                backgroundColor: alertRed,
                 behavior: SnackBarBehavior.floating,
                 margin: const EdgeInsets.all(16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
             );
           }
@@ -89,21 +126,25 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: Colors.white10),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 8))
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.35),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    )
                   ],
                 ),
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header Logo & Branding
+                    // Brand Badge
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: brandBlue.withValues(alpha: 0.2),
+                            color: brandBlue.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Icon(Icons.fingerprint_rounded, color: brandCyan, size: 24),
@@ -111,56 +152,69 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                         const SizedBox(width: 10),
                         const Text(
                           "SOFTWING WORKFORCE",
-                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      "Enterprise Personnel Self-Service Portal",
-                      style: TextStyle(color: textMuted, fontSize: 10.5),
+                      "Personnel Self-Service Portal",
+                      style: TextStyle(color: textMuted, fontSize: 11),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 22),
 
-                    // Navigation Tabs: QR Access vs Credentials
+                    // Switcher Tabs
                     Container(
                       height: 40,
-                      decoration: BoxDecoration(color: deepCarbon, borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(
+                        color: deepCarbon,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       child: TabBar(
                         controller: _tabController,
                         labelColor: Colors.white,
                         unselectedLabelColor: textMuted,
                         indicatorSize: TabBarIndicatorSize.tab,
-                        indicator: BoxDecoration(color: brandBlue, borderRadius: BorderRadius.circular(7)),
+                        indicator: BoxDecoration(
+                          color: brandBlue,
+                          borderRadius: BorderRadius.circular(7),
+                        ),
                         labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                         tabs: const [
-                          Tab(iconMargin: EdgeInsets.zero, text: "QR PASS SCAN"),
-                          Tab(iconMargin: EdgeInsets.zero, text: "CREDENTIALS"),
+                          Tab(text: "QR PASS SCAN"),
+                          Tab(text: "CREDENTIALS"),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 22),
 
-                    // Tab Views
+                    // Active Tab Container
                     SizedBox(
-                      height: 300,
+                      height: 290,
                       child: TabBarView(
                         controller: _tabController,
                         physics: const NeverScrollableScrollPhysics(),
                         children: [
-                          // Tab 1: Live QR Scanner
                           _buildQRScannerTab(state),
-
-                          // Tab 2: Manual Email & Password Form
-                          _buildCredentialsFormTab(state),
+                          _buildCredentialsTab(state),
                         ],
                       ),
                     ),
 
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     const Text(
                       "SOFTWING HRMS • POWERED BY ZERO-TRUST SECURITY",
-                      style: TextStyle(color: Colors.white24, fontSize: 8.5, fontWeight: FontWeight.bold, letterSpacing: 0.6),
+                      style: TextStyle(
+                        color: Colors.white24,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.6,
+                      ),
                     ),
                   ],
                 ),
@@ -172,6 +226,9 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Tab 1: Live Hardware QR Scanner
+  // ---------------------------------------------------------------------------
   Widget _buildQRScannerTab(LoginState state) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -194,7 +251,9 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                 if (state is LoginLoading)
                   Container(
                     color: Colors.black54,
-                    child: const Center(child: CircularProgressIndicator(color: brandCyan)),
+                    child: const Center(
+                      child: CircularProgressIndicator(color: brandCyan),
+                    ),
                   ),
               ],
             ),
@@ -202,7 +261,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         ),
         const SizedBox(height: 14),
         const Text(
-          "Scan the Login Pass assigned by your Admin to enter.",
+          "Scan your Digital ID Pass issued by Admin.",
           textAlign: TextAlign.center,
           style: TextStyle(color: textMuted, fontSize: 10.5),
         ),
@@ -210,14 +269,20 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildCredentialsFormTab(LoginState state) {
+  // ---------------------------------------------------------------------------
+  // Tab 2: Manual Credentials Form
+  // ---------------------------------------------------------------------------
+  Widget _buildCredentialsTab(LoginState state) {
     return Form(
       key: _formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text("OFFICIAL WORK EMAIL / EMP CODE", style: TextStyle(color: textMuted, fontSize: 9.5, fontWeight: FontWeight.bold)),
+          const Text(
+            "OFFICIAL EMAIL / EMP CODE",
+            style: TextStyle(color: textMuted, fontSize: 9.5, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 6),
           TextFormField(
             controller: _loginController,
@@ -225,8 +290,11 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             decoration: _inputStyle(Icons.alternate_email_rounded, "name@softwing.in"),
             validator: (v) => (v == null || v.trim().isEmpty) ? "Required" : null,
           ),
-          const SizedBox(height: 14),
-          const Text("PORTAL PASSWORD", style: TextStyle(color: textMuted, fontSize: 9.5, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          const Text(
+            "PORTAL PASSWORD",
+            style: TextStyle(color: textMuted, fontSize: 9.5, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 6),
           TextFormField(
             controller: _passwordController,
@@ -234,13 +302,17 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             style: const TextStyle(fontSize: 12, color: Colors.white),
             decoration: _inputStyle(
               Icons.lock_outline_rounded,
-              "Enter your password",
+              "Enter password",
               suffix: IconButton(
-                icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off, size: 16, color: textMuted),
+                icon: Icon(
+                  _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                  size: 16,
+                  color: textMuted,
+                ),
                 onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
               ),
             ),
-            validator: (v) => (v == null || v.length < 4) ? "Valid password required" : null,
+            validator: (v) => (v == null || v.length < 4) ? "Password required" : null,
           ),
           const SizedBox(height: 20),
           SizedBox(
@@ -252,23 +324,33 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onPressed: state is LoginLoading
-                  ? null
-                  : () {
-                if (_formKey.currentState!.validate()) {
-                  context.read<LoginBloc>().add(
-                    LoginSubmitted(_loginController.text.trim(), _passwordController.text),
-                  );
-                }
-              },
+              onPressed: state is LoginLoading ? null : _handleManualSubmit,
               child: state is LoginLoading
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text("AUTHENTICATE ACCOUNT", style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                  ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              )
+                  : const Text(
+                "AUTHENTICATE ACCOUNT",
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _handleManualSubmit() {
+    if (_formKey.currentState!.validate()) {
+      context.read<LoginBloc>().add(
+        LoginSubmitted(
+          _loginController.text.trim(),
+          _passwordController.text,
+        ),
+      );
+    }
   }
 
   InputDecoration _inputStyle(IconData icon, String hint, {Widget? suffix}) {
@@ -280,7 +362,10 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       filled: true,
       fillColor: deepCarbon,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
     );
   }
 }

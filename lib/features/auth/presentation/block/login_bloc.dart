@@ -3,7 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 
-// Events
+// =============================================================================
+// LOGIN EVENTS
+// =============================================================================
 abstract class LoginEvent {}
 
 class LoginSubmitted extends LoginEvent {
@@ -17,7 +19,9 @@ class LoginWithQRSubmitted extends LoginEvent {
   LoginWithQRSubmitted(this.rawQrCode);
 }
 
-// States
+// =============================================================================
+// LOGIN STATES
+// =============================================================================
 abstract class LoginState {}
 
 class LoginInitial extends LoginState {}
@@ -34,34 +38,55 @@ class LoginFailure extends LoginState {
   LoginFailure(this.error);
 }
 
+// =============================================================================
+// LOGIN BLOC ENGINE
+// =============================================================================
 class LoginBloc extends Bloc<LoginEvent, LoginState> {
   final AuthRepository repository;
 
   LoginBloc(this.repository) : super(LoginInitial()) {
+    // 1. Username/Email & Password Login
     on<LoginSubmitted>((event, emit) async {
       emit(LoginLoading());
-      final result = await repository.loginWithCredentials(event.login, event.password);
-      result.fold(
-            (failure) => emit(LoginFailure(failure.message)),
-            (auth) => emit(LoginSuccess(auth)),
+
+      final result = await repository.loginWithCredentials(
+        event.login.trim(),
+        event.password,
+      );
+
+      await result.fold(
+            (failure) async => emit(LoginFailure(failure.message)),
+            (auth) async {
+          await repository.updateFCMToken();
+          emit(LoginSuccess(auth));
+        },
       );
     });
 
+    // 2. Instant QR Token Authentication
     on<LoginWithQRSubmitted>((event, emit) async {
       emit(LoginLoading());
 
-      String token = event.rawQrCode;
-      try {
-        final parsed = jsonDecode(event.rawQrCode);
-        if (parsed is Map && parsed.containsKey('qr_token')) {
-          token = parsed['qr_token'];
-        }
-      } catch (_) {}
+      String token = event.rawQrCode.trim();
+
+      // Agar camera pure JSON string ko scan kare to qr_token key extract karein
+      if (token.startsWith('{') && token.endsWith('}')) {
+        try {
+          final Map<String, dynamic> parsed = jsonDecode(token);
+          if (parsed.containsKey('qr_token')) {
+            token = parsed['qr_token'].toString().trim();
+          }
+        } catch (_) {}
+      }
 
       final result = await repository.loginWithQR(token);
-      result.fold(
-            (failure) => emit(LoginFailure(failure.message)),
-            (auth) => emit(LoginSuccess(auth)),
+
+      await result.fold(
+            (failure) async => emit(LoginFailure(failure.message)),
+            (auth) async {
+          await repository.updateFCMToken();
+          emit(LoginSuccess(auth));
+        },
       );
     });
   }
